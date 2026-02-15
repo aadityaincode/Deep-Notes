@@ -1153,18 +1153,14 @@ ${noteContent}`;
 		for (const fb of result.feedback) {
 			const card = container.createDiv({ cls: "deep-notes-feedback-card" });
 
-			// Header row: rating badge (small) + individual score
+			// Header row: similarity score with color coding
 			const fbHeader = card.createDiv({ cls: "deep-notes-feedback-header" });
-			const ratingClass = `rating-${fb.rating}`;
+			const ratingClass = `rating-${fb.rating}`; // Used for color coding only
+
+			// Display raw similarity score instead of categories
 			fbHeader.createEl("span", {
-				text: fb.rating.charAt(0).toUpperCase() + fb.rating.slice(1),
+				text: fb.explanation, // Contains "Similarity: X%"
 				cls: `deep-notes-badge deep-notes-rating-badge ${ratingClass}`,
-			});
-			// Show individual score as small text
-			const individualScore = fb.rating === "correct" ? 100 : fb.rating === "partial" ? 50 : 0;
-			fbHeader.createEl("span", {
-				text: `${individualScore}%`,
-				cls: `deep-notes-individual-score ${ratingClass}`,
 			});
 
 			card.createEl("p", {
@@ -1172,10 +1168,7 @@ ${noteContent}`;
 				cls: "deep-notes-text deep-notes-feedback-question",
 			});
 
-			card.createEl("p", {
-				text: fb.explanation,
-				cls: "deep-notes-feedback-explanation",
-			});
+
 
 			// Suggested answer (collapsible)
 			if (fb.suggestedAnswer) {

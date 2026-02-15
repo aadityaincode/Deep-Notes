@@ -579,19 +579,19 @@ export async function evaluateResponses(
 
 		// Grading Logic (Pure Vector Similarity)
 		if (response.trim().length > 3) {
+			const similarityPercent = Math.round(similarityScore * 100);
+			totalScore += similarityPercent;
+
+			// We keep the rating string for UI color coding, but the score is now the raw percentage
 			if (similarityScore >= 0.85) {
 				rating = "correct";
-				explanation = `Excellent! Your answer is semantically very close to the ideal response (Similarity: ${(similarityScore * 100).toFixed(1)}%).`;
-				totalScore += 100;
 			} else if (similarityScore >= 0.70) {
 				rating = "partial";
-				explanation = `Good effort. Your answer captures some of the meaning but differs significantly from the sample (Similarity: ${(similarityScore * 100).toFixed(1)}%).`;
-				totalScore += 50;
 			} else {
 				rating = "incorrect";
-				explanation = `Your answer seems to miss the key points of the ideal response (Similarity: ${(similarityScore * 100).toFixed(1)}%).`;
-				totalScore += 0;
 			}
+
+			explanation = `Similarity: ${similarityPercent}%`;
 			validResponsesCount++;
 		} else {
 			explanation = "No response provided.";
