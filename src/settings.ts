@@ -6,6 +6,7 @@ import {
 	DEFAULT_MODEL_BY_PROVIDER,
 	DEFAULT_SYSTEM_PROMPT,
 } from "./constants";
+import type { EmbeddingProvider } from "./embeddings";
 import type DeepNotesPlugin from "./main";
 
 export interface DeepNotesSettings {
@@ -16,6 +17,7 @@ export interface DeepNotesSettings {
 	ollamaBaseUrl: string;
 	model: string;
 	systemPrompt: string;
+	embeddingProvider: EmbeddingProvider;
 }
 
 export const DEFAULT_SETTINGS: DeepNotesSettings = {
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	ollamaBaseUrl: "http://127.0.0.1:11434",
 	model: "gpt-4o-mini",
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
+	embeddingProvider: "transformers",
 };
 
 export class DeepNotesSettingTab extends PluginSettingTab {
@@ -42,7 +45,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 		containerEl.createEl("h2", { text: "Deep Notes Settings" });
 
-		// Provider selection
+		// --- AI Provider ---
 		new Setting(containerEl)
 			.setName("AI Provider")
 			.setDesc("Choose which AI provider to use.")
@@ -58,7 +61,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 						this.plugin.settings.model =
 							DEFAULT_MODEL_BY_PROVIDER[provider];
 						await this.plugin.saveSettings();
-						this.display(); // re-render to update model list & key field
+						this.display();
 					});
 			});
 
@@ -154,5 +157,28 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// --- Cross-Topic Search ---
+		containerEl.createEl("h2", { text: "Cross-Topic Search" });
+
+		new Setting(containerEl)
+			.setName("Embedding Provider")
+			.setDesc(
+				"Choose how to generate embeddings for vault search. Transformers.js runs offline in your browser (no API key needed). Gemini uses the cloud embedding API."
+			)
+			.addDropdown((dropdown) => {
+				dropdown.addOption("transformers", "Transformers.js (Local)");
+				dropdown.addOption("gemini", "Gemini Embedding API");
+				dropdown
+					.setValue(this.plugin.settings.embeddingProvider)
+					.onChange(async (value) => {
+						this.plugin.settings.embeddingProvider = value as EmbeddingProvider;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		if (this.plugin.settings.embeddingProvider === "gemini" && !this.plugin.settings.geminiApiKey) {
+			const warning = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
+			warning.setText("⚠️ Gemini embeddings require a Gemini API key. Set it above by selecting Gemini as the AI provider.");
+		}
 	}
 }

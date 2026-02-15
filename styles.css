@@ -52,16 +52,20 @@
 	border: 1px solid var(--background-modifier-border);
 }
 
-.deep-notes-badge-question {
-	background-color: var(--background-secondary-alt);
+.deep-notes-badge-knowledge-expansion {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.deep-notes-badge-suggestion {
+	background-color: var(--background-modifier-success);
 	color: var(--text-normal);
 	border-color: var(--background-modifier-border-hover);
 }
 
-.deep-notes-badge-suggestion {
-	background-color: var(--background-secondary);
-	color: var(--text-muted);
-	border-color: var(--background-modifier-border);
+.deep-notes-badge-cross-topic {
+	background-color: rgba(124, 77, 255, 0.2);
+	color: #7c4dff;
 }
 
 .deep-notes-text {
@@ -204,4 +208,50 @@
 .deep-notes-schedule-btn small {
 	opacity: 0.8;
 	font-weight: 400;
+}
+
+/* Source note link */
+.deep-notes-source-link {
+	display: block;
+	font-size: 12px;
+	color: var(--text-accent);
+	margin-bottom: 8px;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.deep-notes-source-link:hover {
+	text-decoration: underline;
+}
+
+/* Index status */
+.deep-notes-index-status {
+	margin-top: 16px;
+	padding: 12px;
+	background-color: var(--background-secondary);
+	border-radius: 8px;
+}
+
+.deep-notes-index-notice {
+	color: var(--text-muted);
+	font-size: 13px;
+	margin: 0 0 8px 0;
+}
+
+.deep-notes-index-ready {
+	color: var(--text-success, #00c853);
+	font-size: 13px;
+	margin: 0;
+}
+
+.deep-notes-index-btn {
+	margin-top: 4px;
+}
+
+/* Settings warning */
+.deep-notes-setting-warning {
+	color: var(--text-warning, #ffc107);
+	font-size: 13px;
+	padding: 8px;
+	margin-top: 4px;
 }

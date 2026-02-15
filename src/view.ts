@@ -1,6 +1,7 @@
 import { ItemView, Notice, WorkspaceLeaf, TFile, debounce } from "obsidian";
 import { VIEW_TYPE_DEEP_NOTES } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult } from "./ai";
+import { getEmbedding } from "./embeddings";
 import type DeepNotesPlugin from "./main";
 
 export class DeepNotesView extends ItemView {
@@ -74,13 +75,34 @@ export class DeepNotesView extends ItemView {
 
 		try {
 			const content = await this.app.vault.read(file);
+
+			// Search for related notes via vector store
+			let relatedContext = undefined;
+			try {
+				const stats = await this.plugin.vectorStore.getStats();
+				if (stats.totalChunks > 0) {
+					const queryEmbedding = await getEmbedding(content, this.plugin.settings);
+					const results = await this.plugin.vectorStore.search(
+						queryEmbedding,
+						5,
+						file.path
+					);
+					if (results.length > 0) {
+						relatedContext = results;
+					}
+				}
+			} catch (e) {
+				console.warn("Cross-topic search failed, generating without context:", e);
+			}
+
 			this.items = await generateDeepNotesQuestions(
 				content,
 				provider,
 				activeKey,
 				model,
 				systemPrompt,
-				ollamaBaseUrl
+				ollamaBaseUrl,
+				relatedContext
 			);
 		} catch (e) {
 			new Notice(`Deep Notes error: ${e instanceof Error ? e.message : e}`);
@@ -122,6 +144,10 @@ export class DeepNotesView extends ItemView {
 
 		try {
 			const noteContent = await this.app.vault.read(file);
+
+			// Index this note for future cross-topic search
+			await this.plugin.indexer.indexSingleNote(file);
+
 			this.evaluationResult = await evaluateResponses(
 				noteContent,
 				questionsAndResponses,
@@ -152,7 +178,6 @@ export class DeepNotesView extends ItemView {
 	}
 
 	private getDailyNoteSettings(): { folder: string; format: string } {
-		// Try to read from Obsidian's core daily-notes plugin
 		try {
 			const internalPlugins = (this.app as any).internalPlugins;
 			const dailyNotes = internalPlugins?.getPluginById?.("daily-notes");
@@ -214,10 +239,8 @@ export class DeepNotesView extends ItemView {
 
 		const existingFile = this.app.vault.getAbstractFileByPath(dailyNotePath);
 		if (existingFile) {
-			// Append to existing daily note
 			await this.app.vault.append(existingFile as TFile, reviewBlock);
 		} else {
-			// Ensure folder exists, then create daily note
 			if (folder) {
 				await this.ensureFolderExists(folder);
 			}
@@ -273,6 +296,9 @@ export class DeepNotesView extends ItemView {
 				cls: "deep-notes-generate-btn",
 			});
 			btn.addEventListener("click", () => this.triggerGeneration());
+
+			// Show index status
+			this.renderIndexStatus(container);
 			return;
 		}
 
@@ -294,12 +320,39 @@ export class DeepNotesView extends ItemView {
 		for (const item of this.items) {
 			const card = container.createDiv({ cls: "deep-notes-card" });
 
+			const badgeText =
+				item.type === "knowledge-expansion"
+					? "Knowledge Expansion"
+					: item.type === "cross-topic"
+						? "Cross-Topic"
+						: "Suggestion";
 			card.createEl("span", {
-				text: item.type === "question" ? "Question" : "Suggestion",
+				text: badgeText,
 				cls: `deep-notes-badge deep-notes-badge-${item.type}`,
 			});
 
 			card.createEl("p", { text: item.text, cls: "deep-notes-text" });
+
+			// Show source note link for cross-topic questions
+			if (item.type === "cross-topic" && item.sourceNote) {
+				const sourceLink = card.createEl("a", {
+					text: `📎 From: ${item.sourceNote}`,
+					cls: "deep-notes-source-link",
+					href: "#",
+				});
+				sourceLink.addEventListener("click", async (e) => {
+					e.preventDefault();
+					const files = this.app.vault.getMarkdownFiles();
+					const target = files.find(
+						(f) => f.basename === item.sourceNote
+					);
+					if (target) {
+						await this.app.workspace.openLinkText(target.path, "");
+					} else {
+						new Notice(`Note "${item.sourceNote}" not found.`);
+					}
+				});
+			}
 
 			const textarea = card.createEl("textarea", {
 				cls: "deep-notes-response",
@@ -326,11 +379,15 @@ export class DeepNotesView extends ItemView {
 				}
 
 				const calloutType =
-					item.type === "question" ? "question" : "note";
+					item.type === "knowledge-expansion" || item.type === "cross-topic"
+						? "question"
+						: "note";
 				const calloutTitle =
-					item.type === "question"
-						? "Deep Notes Question"
-						: "Deep Notes Suggestion";
+					item.type === "cross-topic"
+						? "Cross-Topic Question"
+						: item.type === "knowledge-expansion"
+							? "Deep Notes Question"
+							: "Deep Notes Suggestion";
 				const calloutBlock = [
 					"",
 					`> [!${calloutType}] ${calloutTitle}`,
@@ -354,6 +411,37 @@ export class DeepNotesView extends ItemView {
 		resetBtn.addEventListener("click", () => this.triggerGeneration());
 	}
 
+	private async renderIndexStatus(container: HTMLElement): Promise<void> {
+		const statusDiv = container.createDiv({ cls: "deep-notes-index-status" });
+
+		try {
+			const stats = await this.plugin.vectorStore.getStats();
+			if (stats.totalChunks === 0) {
+				statusDiv.createEl("p", {
+					text: "Vault not indexed. Index your vault to enable cross-topic questions.",
+					cls: "deep-notes-index-notice",
+				});
+				const indexBtn = statusDiv.createEl("button", {
+					text: "Index Vault Now",
+					cls: "deep-notes-generate-btn deep-notes-index-btn",
+				});
+				indexBtn.addEventListener("click", () => {
+					this.plugin.indexer.indexVault();
+				});
+			} else {
+				statusDiv.createEl("p", {
+					text: `✓ ${stats.totalChunks} chunks indexed for cross-topic search.`,
+					cls: "deep-notes-index-ready",
+				});
+			}
+		} catch {
+			statusDiv.createEl("p", {
+				text: "Could not read index status.",
+				cls: "deep-notes-index-notice",
+			});
+		}
+	}
+
 	private renderEvaluationResult(container: HTMLElement): void {
 		const result = this.evaluationResult!;
 
@@ -361,7 +449,7 @@ export class DeepNotesView extends ItemView {
 		const scoreSection = container.createDiv({ cls: "deep-notes-score-section" });
 		const scoreColorClass =
 			result.score >= 80 ? "score-green" :
-			result.score >= 50 ? "score-yellow" : "score-red";
+				result.score >= 50 ? "score-yellow" : "score-red";
 
 		const scoreEl = scoreSection.createDiv({
 			cls: `deep-notes-score ${scoreColorClass}`,

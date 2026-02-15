@@ -13,5 +13,9 @@
     "esbuild": "0.17.3",
     "obsidian": "latest",
     "typescript": "4.7.4"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2",
+    "vectra": "^0.12.3"
   }
 }

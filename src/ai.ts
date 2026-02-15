@@ -1,9 +1,11 @@
 import type { AIProvider } from "./constants";
 import { EVALUATION_SYSTEM_PROMPT } from "./constants";
+import type { SearchResult } from "./vectorStore";
 
 export interface DeepNotesItem {
-	type: "question" | "suggestion";
+	type: "knowledge-expansion" | "suggestion" | "cross-topic";
 	text: string;
+	sourceNote?: string;
 }
 
 export interface EvaluationFeedback {
@@ -24,22 +26,32 @@ export async function generateDeepNotesQuestions(
 	apiKey: string,
 	model: string,
 	systemPrompt: string,
-	ollamaBaseUrl?: string
+	ollamaBaseUrl?: string,
+	relatedContext?: SearchResult[]
 ): Promise<DeepNotesItem[]> {
+	let userMessage = noteContent;
+
+	if (relatedContext && relatedContext.length > 0) {
+		const contextBlock = relatedContext
+			.map((r) => `- From "${r.noteTitle}" (${r.heading}): ${r.text}`)
+			.join("\n");
+		userMessage = `## Current Note\n${noteContent}\n\n## Related Concepts from Other Notes\n${contextBlock}`;
+	}
+
 	let content: string;
 
 	switch (provider) {
 		case "openai":
-			content = await callOpenAI(noteContent, apiKey, model, systemPrompt);
+			content = await callOpenAI(userMessage, apiKey, model, systemPrompt);
 			break;
 		case "anthropic":
-			content = await callAnthropic(noteContent, apiKey, model, systemPrompt);
+			content = await callAnthropic(userMessage, apiKey, model, systemPrompt);
 			break;
 		case "gemini":
-			content = await callGemini(noteContent, apiKey, model, systemPrompt);
+			content = await callGemini(userMessage, apiKey, model, systemPrompt);
 			break;
 		case "ollama":
-			content = await callOllama(noteContent, model, systemPrompt, ollamaBaseUrl);
+			content = await callOllama(userMessage, model, systemPrompt, ollamaBaseUrl);
 			break;
 	}
 
@@ -131,9 +143,14 @@ function parseResponse(content: string): DeepNotesItem[] {
 		try {
 			const parsed = JSON.parse(jsonMatch[0]);
 			if (Array.isArray(parsed)) {
-				return parsed.map((item: { type?: string; text?: string }) => ({
-					type: item.type === "question" ? "question" : "suggestion",
+				return parsed.map((item: { type?: string; text?: string; sourceNote?: string }) => ({
+					type: item.type === "knowledge-expansion" || item.type === "question"
+						? "knowledge-expansion"
+						: item.type === "cross-topic"
+							? "cross-topic"
+							: "suggestion",
 					text: item.text ?? "",
+					sourceNote: item.sourceNote,
 				}));
 			}
 		} catch {

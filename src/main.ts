@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Plugin, TFile, debounce } from "obsidian";
 import { VIEW_TYPE_DEEP_NOTES } from "./constants";
 import {
 	DeepNotesSettings,
@@ -6,12 +6,24 @@ import {
 	DeepNotesSettingTab,
 } from "./settings";
 import { DeepNotesView } from "./view";
+import { VaultVectorStore } from "./vectorStore";
+import { VaultIndexer } from "./indexer";
 
 export default class DeepNotesPlugin extends Plugin {
 	settings: DeepNotesSettings = DEFAULT_SETTINGS;
+	vectorStore!: VaultVectorStore;
+	indexer!: VaultIndexer;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+
+		// Initialize vector store
+		const pluginDir = this.manifest.dir!;
+		const vaultBasePath = (this.app.vault.adapter as any).basePath;
+		const fullPluginDir = `${vaultBasePath}/${pluginDir}`;
+		this.vectorStore = new VaultVectorStore(fullPluginDir);
+		await this.vectorStore.initialize();
+		this.indexer = new VaultIndexer(this, this.vectorStore);
 
 		this.registerView(VIEW_TYPE_DEEP_NOTES, (leaf) => new DeepNotesView(leaf, this));
 
@@ -35,6 +47,24 @@ export default class DeepNotesPlugin extends Plugin {
 				}
 			},
 		});
+
+		this.addCommand({
+			id: "index-vault",
+			name: "Index Vault for Cross-Topic Search",
+			callback: () => this.indexer.indexVault(),
+		});
+
+		// Incremental re-indexing on file modify
+		this.registerEvent(
+			this.app.vault.on(
+				"modify",
+				debounce((file: TFile) => {
+					if (file.extension === "md") {
+						this.indexer.indexSingleNote(file);
+					}
+				}, 5000)
+			)
+		);
 
 		this.addSettingTab(new DeepNotesSettingTab(this.app, this));
 	}
@@ -63,6 +93,8 @@ export default class DeepNotesPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// Always use the latest system prompt from code
+		this.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
 	}
 
 	async saveSettings(): Promise<void> {
