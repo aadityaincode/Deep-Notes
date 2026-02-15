@@ -11,6 +11,8 @@ export interface DeepNotesItem {
 	sourceNote?: string;
 	sampleAnswer?: string;
 	sampleAnswerEmbedding?: number[];
+	subItems?: DeepNotesItem[];
+	userResponse?: string;
 }
 
 export interface EvaluationFeedback {
@@ -633,4 +635,76 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
 		magB += vecB[i] * vecB[i];
 	}
 	return magA === 0 || magB === 0 ? 0 : dot / (Math.sqrt(magA) * Math.sqrt(magB));
+}
+
+export async function generateDeepNotesSubQuestions(
+	originalQuestion: string,
+	originalSampleAnswer: string | undefined,
+	userResponse: string,
+	noteContent: string,
+	settings: DeepNotesSettings,
+	systemPrompt: string // We can reuse the main prompt or a specific one
+): Promise<DeepNotesItem[]> {
+	const prompt = `
+You are a Socratic tutor. The user has answered a question about their note.
+Your goal is to generate 1 follow-up question to probe deeper into their understanding, challenge a misconception, or ask for clarification.
+
+Original Question: "${originalQuestion}"
+Ideal Answer: "${originalSampleAnswer || "N/A"}"
+User's Response: "${userResponse}"
+
+Current Note Context:
+${noteContent.slice(0, 3000)}
+
+Output exactly 1 item as a JSON array of objects.
+The object MUST have:
+- "type": "knowledge-expansion"
+- "text": The content of the follow-up question.
+- "sample_answer": A concise, ideal answer to this follow-up question.
+- "source_excerpt": (Optional) If there is a specific quote in the text relevant to this new question, include it.
+
+Example:
+[
+  {
+    "type": "knowledge-expansion",
+    "text": "You mentioned X, but how does that account for Y?",
+    "sample_answer": "Y is actually a special case of X because..."
+  }
+]
+`;
+
+	const provider = settings.provider;
+	const apiKey = provider === "gemini" ? settings.geminiApiKey : (provider === "anthropic" ? settings.anthropicApiKey : settings.apiKey);
+	const model = settings.model;
+	const ollamaBaseUrl = settings.ollamaBaseUrl;
+
+	let content = "";
+	// We can reuse the internal callProvider logic by duplicating the switch or using the existing unexported function if available.
+	// Since I am editing ai.ts, I can use the existing callProvider function if it is in scope.
+	// It is defined at line 528.
+
+	try {
+		content = await callProvider(prompt, provider, apiKey, model, systemPrompt, ollamaBaseUrl); // systemPrompt here acts as system instruction for the chat
+	} catch (e) {
+		console.error("Deep Notes: Failed to generate sub-questions", e);
+		return [];
+	}
+
+	const items = parseResponse(content);
+
+	// Generate embedding for sample answer
+	for (const item of items) {
+		if (item.sampleAnswer) {
+			try {
+				const embedding = await getEmbedding(item.sampleAnswer, settings);
+				if (embedding) {
+					item.sampleAnswerEmbedding = embedding;
+				}
+			} catch (e) {
+				console.warn("Deep Notes: Failed to generate embedding for sub-question sample answer", e);
+			}
+		}
+	}
+
+	return items;
 }

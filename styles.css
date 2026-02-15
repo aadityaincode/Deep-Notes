@@ -768,3 +768,21 @@
 .deep-notes-container::-webkit-scrollbar-thumb:hover {
 	background: rgba(200, 162, 78, 0.35);
 }
+/* ── Go Deeper Feature ── */
+
+.deep-notes-sub-questions {
+	margin-top: 12px;
+	position: relative;
+}
+
+.deep-notes-sub-card {
+	background: rgba(255, 255, 255, 0.03); /* Subtle contrast against parent */
+	border: 1px solid rgba(200, 162, 78, 0.1);
+	box-shadow: none;
+}
+
+.deep-notes-sub-card:hover {
+	background: rgba(255, 255, 255, 0.05);
+	transform: none; /* Disable lift effect for sub-cards to avoid clutter */
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
