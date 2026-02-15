@@ -1,31 +1,31 @@
 import { ItemView, Notice, WorkspaceLeaf, TFile, debounce } from "obsidian";
-import { VIEW_TYPE_SOCRATIC } from "./constants";
-import { generateSocraticQuestions, evaluateResponses, SocraticItem, EvaluationResult } from "./ai";
-import type SocraticSagePlugin from "./main";
+import { VIEW_TYPE_DEEP_NOTES } from "./constants";
+import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult } from "./ai";
+import type DeepNotesPlugin from "./main";
 
-export class SocraticSageView extends ItemView {
-	plugin: SocraticSagePlugin;
-	private items: SocraticItem[] = [];
+export class DeepNotesView extends ItemView {
+	plugin: DeepNotesPlugin;
+	private items: DeepNotesItem[] = [];
 	private loading = false;
 	private evaluating = false;
 	private evaluationResult: EvaluationResult | null = null;
 	private textareaRefs: HTMLTextAreaElement[] = [];
 
-	constructor(leaf: WorkspaceLeaf, plugin: SocraticSagePlugin) {
+	constructor(leaf: WorkspaceLeaf, plugin: DeepNotesPlugin) {
 		super(leaf);
 		this.plugin = plugin;
 	}
 
 	getViewType(): string {
-		return VIEW_TYPE_SOCRATIC;
+		return VIEW_TYPE_DEEP_NOTES;
 	}
 
 	getDisplayText(): string {
-		return "Socratic Sage";
+		return "Deep Notes";
 	}
 
 	getIcon(): string {
-		return "message-circle-question";
+		return "book-open";
 	}
 
 	async onOpen(): Promise<void> {
@@ -49,15 +49,15 @@ export class SocraticSageView extends ItemView {
 
 	private getActiveKey(): string {
 		const { provider, apiKey, anthropicApiKey, geminiApiKey } = this.plugin.settings;
-		return { openai: apiKey, anthropic: anthropicApiKey, gemini: geminiApiKey }[provider];
+		return { openai: apiKey, anthropic: anthropicApiKey, gemini: geminiApiKey, ollama: "" }[provider];
 	}
 
 	async triggerGeneration(): Promise<void> {
-		const { provider, model, systemPrompt } = this.plugin.settings;
+		const { provider, model, systemPrompt, ollamaBaseUrl } = this.plugin.settings;
 		const activeKey = this.getActiveKey();
 
-		if (!activeKey) {
-			new Notice("Please set your API key in Socratic Sage settings.");
+		if (provider !== "ollama" && !activeKey) {
+			new Notice("Please set your API key in Deep Notes settings.");
 			return;
 		}
 
@@ -74,15 +74,16 @@ export class SocraticSageView extends ItemView {
 
 		try {
 			const content = await this.app.vault.read(file);
-			this.items = await generateSocraticQuestions(
+			this.items = await generateDeepNotesQuestions(
 				content,
 				provider,
 				activeKey,
 				model,
-				systemPrompt
+				systemPrompt,
+				ollamaBaseUrl
 			);
 		} catch (e) {
-			new Notice(`Socratic Sage error: ${e instanceof Error ? e.message : e}`);
+			new Notice(`Deep Notes error: ${e instanceof Error ? e.message : e}`);
 			this.items = [];
 		} finally {
 			this.loading = false;
@@ -91,11 +92,11 @@ export class SocraticSageView extends ItemView {
 	}
 
 	private async triggerEvaluation(): Promise<void> {
-		const { provider, model } = this.plugin.settings;
+		const { provider, model, ollamaBaseUrl } = this.plugin.settings;
 		const activeKey = this.getActiveKey();
 
-		if (!activeKey) {
-			new Notice("Please set your API key in Socratic Sage settings.");
+		if (provider !== "ollama" && !activeKey) {
+			new Notice("Please set your API key in Deep Notes settings.");
 			return;
 		}
 
@@ -126,7 +127,8 @@ export class SocraticSageView extends ItemView {
 				questionsAndResponses,
 				provider,
 				activeKey,
-				model
+				model,
+				ollamaBaseUrl
 			);
 		} catch (e) {
 			new Notice(`Evaluation error: ${e instanceof Error ? e.message : e}`);
@@ -200,7 +202,7 @@ export class SocraticSageView extends ItemView {
 
 		const reviewBlock = [
 			"",
-			`## Socratic Sage Review: [[${noteName}]]`,
+			`## Deep Notes Review: [[${noteName}]]`,
 			"",
 			`**Score:** ${this.evaluationResult.score}%`,
 			`**Summary:** ${this.evaluationResult.summary}`,
@@ -240,18 +242,18 @@ export class SocraticSageView extends ItemView {
 	private render(): void {
 		const container = this.contentEl;
 		container.empty();
-		container.addClass("socratic-sage-container");
+		container.addClass("deep-notes-container");
 
 		const file = this.app.workspace.getActiveFile();
 		const noteName = file ? file.basename : "No active note";
 
 		// Header
-		const header = container.createDiv({ cls: "socratic-sage-header" });
+		const header = container.createDiv({ cls: "deep-notes-header" });
 		header.createEl("h4", { text: noteName });
 
 		if (this.loading) {
 			container.createDiv({
-				cls: "socratic-sage-loading",
+				cls: "deep-notes-loading",
 				text: "Generating questions...",
 			});
 			return;
@@ -259,7 +261,7 @@ export class SocraticSageView extends ItemView {
 
 		if (this.evaluating) {
 			container.createDiv({
-				cls: "socratic-sage-loading",
+				cls: "deep-notes-loading",
 				text: "Evaluating your responses...",
 			});
 			return;
@@ -267,8 +269,8 @@ export class SocraticSageView extends ItemView {
 
 		if (this.items.length === 0) {
 			const btn = container.createEl("button", {
-				text: "Generate Socratic Questions",
-				cls: "socratic-sage-generate-btn",
+				text: "Generate Deep Notes Questions",
+				cls: "deep-notes-generate-btn",
 			});
 			btn.addEventListener("click", () => this.triggerGeneration());
 			return;
@@ -283,24 +285,24 @@ export class SocraticSageView extends ItemView {
 		// Evaluate button at top
 		const evalBtn = container.createEl("button", {
 			text: "Evaluate",
-			cls: "socratic-sage-generate-btn socratic-sage-evaluate-btn",
+			cls: "deep-notes-generate-btn deep-notes-evaluate-btn",
 		});
 		evalBtn.addEventListener("click", () => this.triggerEvaluation());
 
 		// Render question/suggestion cards
 		this.textareaRefs = [];
 		for (const item of this.items) {
-			const card = container.createDiv({ cls: "socratic-sage-card" });
+			const card = container.createDiv({ cls: "deep-notes-card" });
 
 			card.createEl("span", {
 				text: item.type === "question" ? "Question" : "Suggestion",
-				cls: `socratic-sage-badge socratic-sage-badge-${item.type}`,
+				cls: `deep-notes-badge deep-notes-badge-${item.type}`,
 			});
 
-			card.createEl("p", { text: item.text, cls: "socratic-sage-text" });
+			card.createEl("p", { text: item.text, cls: "deep-notes-text" });
 
 			const textarea = card.createEl("textarea", {
-				cls: "socratic-sage-response",
+				cls: "deep-notes-response",
 				placeholder: "Type your response...",
 				attr: { rows: "3" },
 			}) as HTMLTextAreaElement;
@@ -308,7 +310,7 @@ export class SocraticSageView extends ItemView {
 
 			const addBtn = card.createEl("button", {
 				text: "Add to Note",
-				cls: "socratic-sage-add-btn",
+				cls: "deep-notes-add-btn",
 			});
 			addBtn.addEventListener("click", async () => {
 				const response = textarea.value.trim();
@@ -327,8 +329,8 @@ export class SocraticSageView extends ItemView {
 					item.type === "question" ? "question" : "note";
 				const calloutTitle =
 					item.type === "question"
-						? "Socratic Question"
-						: "Socratic Suggestion";
+						? "Deep Notes Question"
+						: "Deep Notes Suggestion";
 				const calloutBlock = [
 					"",
 					`> [!${calloutType}] ${calloutTitle}`,
@@ -347,7 +349,7 @@ export class SocraticSageView extends ItemView {
 		// Regenerate button at bottom
 		const resetBtn = container.createEl("button", {
 			text: "Regenerate",
-			cls: "socratic-sage-generate-btn socratic-sage-regenerate",
+			cls: "deep-notes-generate-btn deep-notes-regenerate",
 		});
 		resetBtn.addEventListener("click", () => this.triggerGeneration());
 	}
@@ -356,56 +358,56 @@ export class SocraticSageView extends ItemView {
 		const result = this.evaluationResult!;
 
 		// Score display
-		const scoreSection = container.createDiv({ cls: "socratic-sage-score-section" });
+		const scoreSection = container.createDiv({ cls: "deep-notes-score-section" });
 		const scoreColorClass =
 			result.score >= 80 ? "score-green" :
 			result.score >= 50 ? "score-yellow" : "score-red";
 
 		const scoreEl = scoreSection.createDiv({
-			cls: `socratic-sage-score ${scoreColorClass}`,
+			cls: `deep-notes-score ${scoreColorClass}`,
 		});
 		scoreEl.createEl("span", {
 			text: `${result.score}%`,
-			cls: "socratic-sage-score-value",
+			cls: "deep-notes-score-value",
 		});
 		scoreEl.createEl("span", {
 			text: "Understanding",
-			cls: "socratic-sage-score-label",
+			cls: "deep-notes-score-label",
 		});
 
 		// Summary
 		if (result.summary) {
 			container.createDiv({
-				cls: "socratic-sage-summary",
+				cls: "deep-notes-summary",
 				text: result.summary,
 			});
 		}
 
 		// Per-question feedback
 		for (const fb of result.feedback) {
-			const card = container.createDiv({ cls: "socratic-sage-feedback-card" });
+			const card = container.createDiv({ cls: "deep-notes-feedback-card" });
 
 			const ratingClass = `rating-${fb.rating}`;
 			card.createEl("span", {
 				text: fb.rating.charAt(0).toUpperCase() + fb.rating.slice(1),
-				cls: `socratic-sage-badge socratic-sage-rating-badge ${ratingClass}`,
+				cls: `deep-notes-badge deep-notes-rating-badge ${ratingClass}`,
 			});
 
 			card.createEl("p", {
 				text: fb.question,
-				cls: "socratic-sage-text socratic-sage-feedback-question",
+				cls: "deep-notes-text deep-notes-feedback-question",
 			});
 
 			card.createEl("p", {
 				text: fb.explanation,
-				cls: "socratic-sage-feedback-explanation",
+				cls: "deep-notes-feedback-explanation",
 			});
 		}
 
 		// Schedule Review button
 		const scheduleBtn = container.createEl("button", {
 			text: "Schedule Review",
-			cls: "socratic-sage-generate-btn socratic-sage-schedule-btn",
+			cls: "deep-notes-generate-btn deep-notes-schedule-btn",
 		});
 		const reviewDate = this.getReviewDate(result.score);
 		const dateStr = reviewDate.toISOString().split("T")[0];
@@ -417,7 +419,7 @@ export class SocraticSageView extends ItemView {
 		// Back button
 		const backBtn = container.createEl("button", {
 			text: "Back to Questions",
-			cls: "socratic-sage-generate-btn socratic-sage-regenerate",
+			cls: "deep-notes-generate-btn deep-notes-regenerate",
 		});
 		backBtn.addEventListener("click", () => {
 			this.evaluationResult = null;

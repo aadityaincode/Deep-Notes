@@ -6,30 +6,32 @@ import {
 	DEFAULT_MODEL_BY_PROVIDER,
 	DEFAULT_SYSTEM_PROMPT,
 } from "./constants";
-import type SocraticSagePlugin from "./main";
+import type DeepNotesPlugin from "./main";
 
-export interface SocraticSageSettings {
+export interface DeepNotesSettings {
 	provider: AIProvider;
 	apiKey: string;
 	anthropicApiKey: string;
 	geminiApiKey: string;
+	ollamaBaseUrl: string;
 	model: string;
 	systemPrompt: string;
 }
 
-export const DEFAULT_SETTINGS: SocraticSageSettings = {
+export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	provider: "openai",
 	apiKey: "",
 	anthropicApiKey: "",
 	geminiApiKey: "",
+	ollamaBaseUrl: "http://127.0.0.1:11434",
 	model: "gpt-4o-mini",
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
 };
 
-export class SocraticSageSettingTab extends PluginSettingTab {
-	plugin: SocraticSagePlugin;
+export class DeepNotesSettingTab extends PluginSettingTab {
+	plugin: DeepNotesPlugin;
 
-	constructor(app: App, plugin: SocraticSagePlugin) {
+	constructor(app: App, plugin: DeepNotesPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -38,7 +40,7 @@ export class SocraticSageSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Socratic Sage Settings" });
+		containerEl.createEl("h2", { text: "Deep Notes Settings" });
 
 		// Provider selection
 		new Setting(containerEl)
@@ -81,21 +83,41 @@ export class SocraticSageSettingTab extends PluginSettingTab {
 				placeholder: "AI...",
 				field: "geminiApiKey" as const,
 			},
-		}[provider];
+		};
 
-		new Setting(containerEl)
-			.setName(keyInfo.name)
-			.setDesc(keyInfo.desc)
-			.addText((text) =>
-				text
-					.setPlaceholder(keyInfo.placeholder)
-					.setValue(this.plugin.settings[keyInfo.field])
-					.then((t) => (t.inputEl.type = "password"))
-					.onChange(async (value) => {
-						this.plugin.settings[keyInfo.field] = value.trim();
-						await this.plugin.saveSettings();
-					})
-			);
+		if (provider !== "ollama") {
+			const providerKeyInfo = keyInfo[provider];
+			new Setting(containerEl)
+				.setName(providerKeyInfo.name)
+				.setDesc(providerKeyInfo.desc)
+				.addText((text) =>
+					text
+						.setPlaceholder(providerKeyInfo.placeholder)
+						.setValue(this.plugin.settings[providerKeyInfo.field])
+						.then((t) => (t.inputEl.type = "password"))
+						.onChange(async (value) => {
+							this.plugin.settings[providerKeyInfo.field] = value.trim();
+							await this.plugin.saveSettings();
+						})
+				);
+		} else {
+			new Setting(containerEl)
+				.setName("Ollama")
+				.setDesc("Runs locally and does not require an API key.");
+
+			new Setting(containerEl)
+				.setName("Ollama Base URL")
+				.setDesc("Local Ollama server URL.")
+				.addText((text) =>
+					text
+						.setPlaceholder("http://127.0.0.1:11434")
+						.setValue(this.plugin.settings.ollamaBaseUrl)
+						.onChange(async (value) => {
+							this.plugin.settings.ollamaBaseUrl = value.trim() || "http://127.0.0.1:11434";
+							await this.plugin.saveSettings();
+						})
+				);
+		}
 
 		// Model dropdown (filtered by provider)
 		const models = MODELS_BY_PROVIDER[provider];

@@ -1,33 +1,33 @@
 import { Plugin, WorkspaceLeaf } from "obsidian";
-import { VIEW_TYPE_SOCRATIC } from "./constants";
+import { VIEW_TYPE_DEEP_NOTES } from "./constants";
 import {
-	SocraticSageSettings,
+	DeepNotesSettings,
 	DEFAULT_SETTINGS,
-	SocraticSageSettingTab,
+	DeepNotesSettingTab,
 } from "./settings";
-import { SocraticSageView } from "./view";
+import { DeepNotesView } from "./view";
 
-export default class SocraticSagePlugin extends Plugin {
-	settings: SocraticSageSettings = DEFAULT_SETTINGS;
+export default class DeepNotesPlugin extends Plugin {
+	settings: DeepNotesSettings = DEFAULT_SETTINGS;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 
-		this.registerView(VIEW_TYPE_SOCRATIC, (leaf) => new SocraticSageView(leaf, this));
+		this.registerView(VIEW_TYPE_DEEP_NOTES, (leaf) => new DeepNotesView(leaf, this));
 
-		this.addRibbonIcon("message-circle-question", "Socratic Sage", () => {
+		this.addRibbonIcon("book-open", "Deep Notes", () => {
 			this.activateView();
 		});
 
 		this.addCommand({
-			id: "open-socratic-sage",
-			name: "Open Socratic Sage",
+			id: "open-deep-notes",
+			name: "Open Deep Notes",
 			callback: () => this.activateView(),
 		});
 
 		this.addCommand({
-			id: "generate-socratic-questions",
-			name: "Generate Socratic Questions",
+			id: "generate-deep-notes-questions",
+			name: "Generate Deep Notes Questions",
 			callback: async () => {
 				const view = await this.activateView();
 				if (view) {
@@ -36,29 +36,29 @@ export default class SocraticSagePlugin extends Plugin {
 			},
 		});
 
-		this.addSettingTab(new SocraticSageSettingTab(this.app, this));
+		this.addSettingTab(new DeepNotesSettingTab(this.app, this));
 	}
 
 	onunload(): void {
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_SOCRATIC);
+		this.app.workspace.detachLeavesOfType(VIEW_TYPE_DEEP_NOTES);
 	}
 
-	async activateView(): Promise<SocraticSageView | null> {
+	async activateView(): Promise<DeepNotesView | null> {
 		const { workspace } = this.app;
-		let leaf = workspace.getLeavesOfType(VIEW_TYPE_SOCRATIC)[0];
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_DEEP_NOTES)[0];
 
 		if (!leaf) {
 			const rightLeaf = workspace.getRightLeaf(false);
 			if (!rightLeaf) return null;
 			leaf = rightLeaf;
 			await leaf.setViewState({
-				type: VIEW_TYPE_SOCRATIC,
+				type: VIEW_TYPE_DEEP_NOTES,
 				active: true,
 			});
 		}
 
 		workspace.revealLeaf(leaf);
-		return leaf.view as SocraticSageView;
+		return leaf.view as DeepNotesView;
 	}
 
 	async loadSettings(): Promise<void> {

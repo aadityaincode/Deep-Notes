@@ -1,7 +1,7 @@
 {
-  "name": "socratic-sage",
+  "name": "deep-notes",
   "version": "1.0.0",
-  "description": "Socratic questions and suggestions from your notes using OpenAI GPT",
+  "description": "Generate deep questions and suggestions from your notes using AI",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
