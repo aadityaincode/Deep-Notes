@@ -1,4 +1,8 @@
+<div align="center">
+
 # Deep Notes
+
+</div>
 
 <p align="center">
   <img src="./assets/logo.png" alt="Deep Notes Logo" width="320"/>
