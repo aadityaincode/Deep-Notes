@@ -1,132 +1,125 @@
 # Deep Notes
 
-An Obsidian plugin that uses AI to generate deep questions from your notes, evaluate your understanding, and schedule spaced-repetition reviews on your calendar.
+Deep Notes is an Obsidian plugin designed to act as a Socratic tutor for your notes. Instead of passively reading or summarizing, it challenges you to actively recall information, connect concepts across your vault, and deepen your understanding through recursive questioning.
 
-## Features
+Its primary goal is to transform note-taking from a collection mechanic into a learning mechanic.
 
-- **Deep Question Generation** — Generates 3-5 thought-provoking questions and suggestions from any note using AI
-- **Multi-Provider Support** — Works with OpenAI, Anthropic (Claude), and Google Gemini
-- **Local Ollama Support** — Run models locally without API keys or billing
-- **Image OCR Context** — Extracts text from embedded images and includes it in question generation context
-- **AI-Powered Evaluation** — Submit your responses and get a percentage-based understanding score with per-question feedback
-- **Spaced Repetition Scheduling** — Automatically computes a review date based on your score and appends a review reminder to your daily note
-- **Calendar Integration** — Works with [Liam Cain's Calendar plugin](https://github.com/liamcain/obsidian-calendar-plugin) to show review dates as dots on your calendar
-- **Add to Note** — Append any question and your response directly into your note as a callout block
+## Core Features
 
-## How It Works
+### Socratic Questioning
+The plugin analyzes your current note and generates three types of items:
+1.  **Knowledge Expansion**: Probing questions that test your understanding of the specific note content.
+2.  **Cross-Topic Connections**: Questions that semantically link the current note to other relevant notes in your vault.
+3.  **Suggestions**: Actionable advice on how to improve the note's clarity or depth.
 
-1. Open a note and click the Deep Notes ribbon icon (or run the command)
-2. Click **Generate Deep Notes Questions** to get AI-generated questions about your note
-3. Type your responses in the text areas under each question
-4. Click **Evaluate** to get your understanding score and per-question feedback
-5. Click **Schedule Review** to add a review reminder to the daily note for the computed date
+### "Go Deeper" (Recursive Learning)
+Learning is rarely linear. The "Go Deeper" feature allows you to select any generated question and request a follow-up based on your initial answer.
+-   The AI analyzes your response in the context of the original note.
+-   It generates a specific follow-up question to clear up misconceptions or push for more detail.
+-   This creates a nested thread of dialogue, simulating a real tutoring session.
 
-### Spaced Repetition Intervals
+### Active Evaluation
+After answering questions, you can trigger an evaluation. The system:
+-   Scores your answers based on semantic similarity to ideal answers.
+-   Provides specific feedback on where you were correct, partially correct, or incorrect.
+-    highlights the exact source text in your note that inspired the question, allowing for quick verification.
 
-| Score | Review In |
-|-------|-----------|
-| 90%+  | 14 days   |
-| 75-89%| 7 days    |
-| 50-74%| 3 days    |
-| <50%  | 1 day     |
+### Vault Indexing (Semantic Search)
+Deep Notes builds a local vector index of your vault.
+-   It chunks your notes and generates embeddings (using local models or APIs).
+-   This allows the plugin to find "Related Concepts" from other files even if they don't share keywords, enabling the **Cross-Topic** questions.
+
+### Multimodal Support (OCR & Vision)
+-   **Images**: The plugin can scan images in your notes using OCR (Tesseract) or Vision Models (Gemini 2.0 Flash).
+-   **Excalidraw**: It natively parses text elements from embedded Excalidraw drawings.
+-   This allows the AI to ask questions about charts, diagrams, and handwritten notes.
+
+### Spaced Repetition Integration
+Based on your evaluation score, the plugin schedules a review.
+-   Low scores trigger a review sooner (e.g., tomorrow).
+-   High scores push the review date further out.
+-   The review is automatically appended to your Daily Note for that future date.
+
+---
 
 ## Setup
 
-1. Install the plugin in your Obsidian vault
-2. Go to **Settings > Deep Notes**
-3. Select your AI provider (OpenAI, Anthropic, Gemini, or Ollama Local)
-4. Enter your API key (only for cloud providers)
-5. (Optional) Install the [Calendar plugin](https://github.com/liamcain/obsidian-calendar-plugin) to see review dates on your calendar sidebar
+### 1. Installation
+1.  Open Obsidian Settings > **Community Plugins**.
+2.  Turn off "Safe Mode".
+3.  Click **Browse** and search for "Deep Notes".
+4.  Click **Install** and then **Enable**.
 
-## Run Locally with Ollama (No API Key)
+### 2. Configuration
+Go to **Settings > Deep Notes**.
 
-### Install Ollama
+#### AI Provider
+Choose your backend:
+-   **Cloud (Recommended for Ease)**: Select OpenAI, Anthropic, or Gemini. Enter your API key.
+-   **Local (Ollama)**: Select "Ollama". Ensure you have [Ollama](https://ollama.com/) installed and running (`ollama serve`).
+    -   Default URL: `http://127.0.0.1:11434`
 
-Choose one:
+#### Vision & Embeddings
+-   **Image Scanning**: Enable "Vision Provider" (Gemini 2.0 Flash or Ollama `llava`).
+-   **Embeddings**: Choose "Gemini" (requires API key) or "Ollama" (requires `nomic-embed-text` model).
+    -   *Note*: If using Ollama for embeddings, run `ollama pull nomic-embed-text` in your terminal first.
 
-- macOS (Homebrew):
+---
 
-```bash
-brew install --cask ollama
-```
+## Usage
 
-- Download installer: [https://ollama.com/download](https://ollama.com/download)
+### 1. Generate Questions
+-   Open any note in Obsidian.
+-   Click the **Deep Notes icon** (triangle) in the ribbon or run the command `Deep Notes: Open Deep Notes View`.
+-   Click **Generate Questions**. The AI will read your note and create 6 items (Questions, Suggestions, Connections).
 
-### Start Ollama and download a model
+### 2. Answer & "Go Deeper"
+-   Type your answer in the text box.
+-   **Go Deeper**: Want to challenge yourself? Click "Go Deeper" after answering. The AI will ask a follow-up question based on your specific response.
+-   **Add to Note**: Click "Add to Note" to insert the Q&A pair directly into your file, right after the relevant paragraph.
 
-1. Start the local Ollama server:
+### 3. Evaluate
+-   Once you've answered a few questions, click **Evaluate & Save Session**.
+-   The AI scores your answers (0-100%) and gives feedback:
+    -   **Correct**: Green badge.
+    -   **Partial**: Yellow badge.
+    -   **Incorrect**: Red badge.
 
-```bash
-ollama serve
-```
+### 4. Review
+-   Click **Schedule Review** to add a reminder to your future Daily Note based on your score.
+-   Access past sessions via the **History** button to retake quizzes.
 
-2. In a second terminal, pull a model:
+---
 
-```bash
-ollama pull llama3.2:latest
-```
+## Technical Implementation
 
-3. Verify models installed:
+### Architecture
+The plugin is built with a modular architecture to separate UI, Logic, and State:
+-   **State Management**: It uses a recursive data structure (`DeepNotesItem`) to handle nested questions and responses. State is persisted in a local LRU cache to survive view reloads.
+-   **Vector Store**: A lightweight, in-memory vector store that persists to `vectors/index.json`. It uses cosine similarity to find relevant context.
+-   **AI Abstraction**: A unified interface supports multiple providers (Gemini, Anthropic, OpenAI, and local LLMs via Ollama) for both text generation and embeddings.
 
-```bash
-ollama list
-```
+### Intelligent Context
+Unlike simple wrappers that send the entire file to an LLM, Deep Notes uses a RAG-lite approach:
+-   It retrieves the active note content.
+-   It queries the local vector store for the top 3-5 semantically related chunks from *other* notes.
+-   It combines these into a context window to generate questions that bridge concepts.
 
-### Configure the plugin for local mode
+### Recursive UI
+The main view (`DeepNotesView`) implements a recursive rendering engine.
+-   Standard questions are rendered as top-level cards.
+-   "Go Deeper" triggers a sub-render of the nested `subItems` array, creating an indented thread.
+-   This allows for infinite depth in conversation threads without cluttering the interface.
 
-1. In Obsidian plugin settings:
-	- Set **AI Provider** to **Ollama (Local)**
-	- Set **Ollama Base URL** to `http://127.0.0.1:11434`
-	- Set model to one from `ollama list` (recommended: `llama3.2:latest`)
-2. Use the plugin normally; no API key is required for Ollama.
+### Context-Aware Insertion
+When you choose to "Add to Note", the plugin finds the exact excerpt in your file that the question refers to.
+-   It uses a fuzzy search algorithm to locate the source text.
+-   It inserts the Q&A block immediately after that paragraph, preserving the flow of your document.
 
-## Image Analysis (OCR & Vision)
+---
 
-Deep Notes can analyze images referenced in your notes (screenshots, diagrams, etc.) to extract text and context for question generation. You can use either a local model (Ollama) or a cloud model (Gemini).
-
-### Option A: Local Vision (Ollama)
-
-1. Pull a vision model:
-   ```bash
-   ollama pull llava:latest
-   ```
-2. In **Settings > Deep Notes**:
-   - Set **Vision Provider** to **Ollama**
-   - Set **Vision Model** to `llava:latest`
-
-### Option B: Cloud Vision (Google Gemini)
-
-1. Get a Gemini API Key from Google AI Studio.
-2. In **Settings > Deep Notes**:
-   - Set **Vision Provider** to **Gemini**
-   - Enter your **Gemini API Key**
-   - The plugin uses `gemini-2.0-flash` by default for fast, accurate image analysis.
-
-3. **Usage:**
-   - Embed images in your note (e.g., `![[image.png]]`).
-   - Open Deep Notes view.
-   - Click **Scan Images**.
-   - The AI will analyze the images and generate questions based on the visual content.
-
-### Ollama implementation notes
-
-- The plugin sends local chat requests to `POST /api/chat` on your Ollama server.
-- If the configured model is missing (for example `llama3.2:3b`), the plugin automatically tries a local fallback tag such as `llama3.2:latest`.
-- If no compatible local model exists, the plugin shows a clear error with the exact `ollama pull` command to run.
-
-## Building from Source
-
-```bash
-npm install
-npm run build
-```
-
-For development with auto-rebuild:
-
-```bash
-npm run dev
-```
-
-## License
-
-MIT
+## Privacy & Local-First Design
+Deep Notes is designed to work with your privacy preferences.
+-   **Ollama Support**: You can run the entire pipeline (Generation, Embeddings, Evaluation) locally using Ollama.
+-   **API Keys**: If you use cloud providers (Gemini, OpenAI), your keys are stored securely in Obsidian's local configuration.
+-   **Data**: Your notes and the vector index never leave your machine except when explicitly sending a prompt to your chosen AI provider.
