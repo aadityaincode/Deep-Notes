@@ -1,4 +1,8 @@
-# Deep Notes (CalgaryHacks 2026)
+# Deep Notes
+
+<p align="center">
+  <img src="./assets/logo.png" alt="Deep Notes Logo" width="320"/>
+</p>
 
 Deep Notes is an Obsidian plugin designed to act as a Socratic tutor for your notes. Instead of passively reading or summarizing, it challenges you to actively recall information, connect concepts across your vault, and deepen your understanding through recursive questioning.
 
@@ -154,3 +158,10 @@ Deep Notes is designed to work with your privacy preferences.
 - Toby Allan
 - Zohaib Talat
 
+---
+
+<div align="center">
+
+## **CALGARY HACKS 2026**
+
+</div>
