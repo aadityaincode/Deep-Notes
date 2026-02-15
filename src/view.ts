@@ -4,7 +4,7 @@ import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, Evaluatio
 import { getEmbedding } from "./embeddings";
 import { listEmbeddedImages, loadImagesByPaths, resolveExcalidrawEmbeddedImages, extractExcalidrawAnnotations, ImageInfo, ImagePayload } from "./ocr";
 import { saveSession, getSessionsForNote, deleteSession, QASession } from "./history";
-import { HIGHLIGHT_COLORS, applyHighlights, clearAllHighlights, scrollToExcerpt } from "./highlights";
+import { HIGHLIGHT_COLORS, applyHighlights, clearAllHighlights, scrollToExcerpt, findExcerptInText } from "./highlights";
 import type DeepNotesPlugin from "./main";
 
 type ViewMode = "questions" | "evaluation" | "history";
@@ -847,7 +847,20 @@ ${noteContent}`;
 					"",
 				].join("\n");
 
-				await this.app.vault.append(activeFile, calloutBlock);
+				const fileContent = await this.app.vault.read(activeFile);
+				// Try to find where to insert
+				const range = item.sourceExcerpt ? findExcerptInText(fileContent, item.sourceExcerpt) : null;
+
+				if (range) {
+					// Insert right after the highlighted text
+					const insertIdx = range.to;
+					const newContent = fileContent.slice(0, insertIdx) + "\n" + calloutBlock + fileContent.slice(insertIdx);
+					await this.app.vault.modify(activeFile, newContent);
+				} else {
+					// Fallback: append to end
+					await this.app.vault.append(activeFile, calloutBlock);
+				}
+
 				new Notice("Added to note!");
 				textarea.value = "";
 			});
