@@ -304,11 +304,13 @@ function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
 	const sourceExcerpt =
 		typeof item.sourceExcerpt === "string"
 			? item.sourceExcerpt
-			: typeof item.excerpt === "string"
-				? item.excerpt
-				: typeof item.quote === "string"
-					? item.quote
-					: undefined;
+			: typeof item.source_excerpt === "string"
+				? item.source_excerpt
+				: typeof item.excerpt === "string"
+					? item.excerpt
+					: typeof item.quote === "string"
+						? item.quote
+						: undefined;
 
 	const sourceNote =
 		typeof item.sourceNote === "string"

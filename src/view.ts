@@ -22,6 +22,7 @@ const sessionCache = new Map<string, CachedSession>();
 
 export class DeepNotesView extends ItemView {
 	plugin: DeepNotesPlugin;
+	private static hasShownIndexStatus = false;
 	private items: DeepNotesItem[] = [];
 	private loading = false;
 	private loadingMessage = "";
@@ -50,7 +51,7 @@ export class DeepNotesView extends ItemView {
 	}
 
 	getIcon(): string {
-		return "book-open";
+		return "triangle";
 	}
 
 	async onOpen(): Promise<void> {
@@ -1090,10 +1091,16 @@ ${noteContent}`;
 	}
 
 	private async renderIndexStatus(container: HTMLElement): Promise<void> {
-		const statusDiv = container.createDiv({ cls: "deep-notes-index-status" });
-
 		try {
 			const stats = await this.plugin.vectorStore.getStats();
+
+			// If we have content and already showed the specific success message, skip rendering entirely
+			if (stats.totalChunks > 0 && (this.constructor as typeof DeepNotesView).hasShownIndexStatus) {
+				return;
+			}
+
+			const statusDiv = container.createDiv({ cls: "deep-notes-index-status" });
+
 			if (stats.totalChunks === 0) {
 				statusDiv.createEl("p", {
 					text: "Vault not indexed. Index your vault to enable cross-topic questions.",
@@ -1111,8 +1118,20 @@ ${noteContent}`;
 					text: `✓ ${stats.totalChunks} chunks indexed for cross-topic search.`,
 					cls: "deep-notes-index-ready",
 				});
+
+				// Mark as shown
+				(this.constructor as typeof DeepNotesView).hasShownIndexStatus = true;
+
+				// Fade out after 3 seconds
+				setTimeout(() => {
+					statusDiv.addClass("fading-out");
+					setTimeout(() => {
+						statusDiv.remove();
+					}, 500); // Wait for CSS transition
+				}, 3000);
 			}
 		} catch {
+			const statusDiv = container.createDiv({ cls: "deep-notes-index-status" });
 			statusDiv.createEl("p", {
 				text: "Could not read index status.",
 				cls: "deep-notes-index-notice",

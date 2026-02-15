@@ -42,6 +42,7 @@ Each object MUST have:
 - "type": "knowledge-expansion", "suggestion", or "cross-topic"
 - "text": The content of the question or suggestion.
 - "sample_answer": A concise, ideal answer to the question (or rationale for the suggestion). This is CRITICAL for evaluation.
+- "source_excerpt": The exact, verbatim quote from the note that inspired this question. This is used to highlight the text in the note.
 - "sourceNote": (Only for "cross-topic") The title of the related note you are connecting to.
 
 Example:
@@ -49,18 +50,21 @@ Example:
   {
     "type": "knowledge-expansion", 
     "text": "How does the concept of 'entropy' here relate to information theory?",
-    "sample_answer": "In both fields, entropy measures uncertainty. In thermodynamics, it's energy unavailable for work; in information theory, it's the surprise in a message."
+    "sample_answer": "In both fields, entropy measures uncertainty. In thermodynamics, it's energy unavailable for work; in information theory, it's the surprise in a message.",
+    "source_excerpt": "entropy is a measure of the disorder of a system"
   },
   {
     "type": "suggestion",
     "text": "Consider adding a section on the 'Heat Death of the Universe'.",
-    "sample_answer": "This provides a concrete application of the second law of thermodynamics."
+    "sample_answer": "This provides a concrete application of the second law of thermodynamics.",
+    "source_excerpt": "The second law of thermodynamics states that the total entropy of an isolated system can never decrease"
   },
   {
     "type": "cross-topic",
     "text": "How does the 'feedback loop' discussed here relate to the 'Control Systems' note?",
     "sample_answer": "Both notes describe homeostatic mechanisms, but this note focuses on biological feedback while Control Systems focuses on mechanical PID loops.",
-    "sourceNote": "Control Systems"
+    "sourceNote": "Control Systems",
+    "source_excerpt": "biological systems maintain homeostasis through negative feedback loops"
   }
 ]
 `;
