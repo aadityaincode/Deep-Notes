@@ -1,6 +1,7 @@
 import type { AIProvider } from "./constants";
 import { EVALUATION_SYSTEM_PROMPT } from "./constants";
 import type { SearchResult } from "./vectorStore";
+import type { ImagePayload } from "./ocr";
 
 export interface DeepNotesItem {
 	type: "knowledge-expansion" | "suggestion" | "cross-topic";
@@ -27,7 +28,8 @@ export async function generateDeepNotesQuestions(
 	model: string,
 	systemPrompt: string,
 	ollamaBaseUrl?: string,
-	relatedContext?: SearchResult[]
+	relatedContext?: SearchResult[],
+	images?: ImagePayload[]
 ): Promise<DeepNotesItem[]> {
 	let userMessage = noteContent;
 
@@ -38,20 +40,21 @@ export async function generateDeepNotesQuestions(
 		userMessage = `## Current Note\n${noteContent}\n\n## Related Concepts from Other Notes\n${contextBlock}`;
 	}
 
+	const imgs = images && images.length > 0 ? images : undefined;
 	let content: string;
 
 	switch (provider) {
 		case "openai":
-			content = await callOpenAI(userMessage, apiKey, model, systemPrompt);
+			content = await callOpenAI(userMessage, apiKey, model, systemPrompt, imgs);
 			break;
 		case "anthropic":
-			content = await callAnthropic(userMessage, apiKey, model, systemPrompt);
+			content = await callAnthropic(userMessage, apiKey, model, systemPrompt, imgs);
 			break;
 		case "gemini":
-			content = await callGemini(userMessage, apiKey, model, systemPrompt);
+			content = await callGemini(userMessage, apiKey, model, systemPrompt, imgs);
 			break;
 		case "ollama":
-			content = await callOllama(userMessage, model, systemPrompt, ollamaBaseUrl);
+			content = await callOllama(userMessage, model, systemPrompt, ollamaBaseUrl, imgs);
 			break;
 	}
 
@@ -62,10 +65,15 @@ async function callOllama(
 	noteContent: string,
 	model: string,
 	systemPrompt: string,
-	baseUrl = "http://127.0.0.1:11434"
+	baseUrl = "http://127.0.0.1:11434",
+	images?: ImagePayload[]
 ): Promise<string> {
 	const normalizedBase = baseUrl.replace(/\/$/, "");
 	const doChat = async (targetModel: string) => {
+		const userMsg: Record<string, unknown> = { role: "user", content: noteContent };
+		if (images && images.length > 0) {
+			userMsg.images = images.map((img) => img.base64);
+		}
 		return fetch(`${normalizedBase}/api/chat`, {
 			method: "POST",
 			headers: {
@@ -76,7 +84,7 @@ async function callOllama(
 				stream: false,
 				messages: [
 					{ role: "system", content: systemPrompt },
-					{ role: "user", content: noteContent },
+					userMsg,
 				],
 			}),
 		});
@@ -165,8 +173,22 @@ async function callOpenAI(
 	noteContent: string,
 	apiKey: string,
 	model: string,
-	systemPrompt: string
+	systemPrompt: string,
+	images?: ImagePayload[]
 ): Promise<string> {
+	// Build user content: text + optional images
+	let userContent: unknown;
+	if (images && images.length > 0) {
+		const parts: unknown[] = images.map((img) => ({
+			type: "image_url",
+			image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+		}));
+		parts.push({ type: "text", text: noteContent });
+		userContent = parts;
+	} else {
+		userContent = noteContent;
+	}
+
 	const response = await fetch("https://api.openai.com/v1/chat/completions", {
 		method: "POST",
 		headers: {
@@ -177,7 +199,7 @@ async function callOpenAI(
 			model,
 			messages: [
 				{ role: "system", content: systemPrompt },
-				{ role: "user", content: noteContent },
+				{ role: "user", content: userContent },
 			],
 			temperature: 0.7,
 		}),
@@ -196,8 +218,26 @@ async function callAnthropic(
 	noteContent: string,
 	apiKey: string,
 	model: string,
-	systemPrompt: string
+	systemPrompt: string,
+	images?: ImagePayload[]
 ): Promise<string> {
+	// Build user content blocks: images first, then text
+	let contentBlocks: unknown;
+	if (images && images.length > 0) {
+		const parts: unknown[] = images.map((img) => ({
+			type: "image",
+			source: {
+				type: "base64",
+				media_type: img.mimeType,
+				data: img.base64,
+			},
+		}));
+		parts.push({ type: "text", text: noteContent });
+		contentBlocks = parts;
+	} else {
+		contentBlocks = noteContent;
+	}
+
 	const response = await fetch("https://api.anthropic.com/v1/messages", {
 		method: "POST",
 		headers: {
@@ -210,7 +250,7 @@ async function callAnthropic(
 			model,
 			max_tokens: 1024,
 			system: systemPrompt,
-			messages: [{ role: "user", content: noteContent }],
+			messages: [{ role: "user", content: contentBlocks }],
 		}),
 	});
 
@@ -228,9 +268,25 @@ async function callGemini(
 	noteContent: string,
 	apiKey: string,
 	model: string,
-	systemPrompt: string
+	systemPrompt: string,
+	images?: ImagePayload[]
 ): Promise<string> {
 	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+	// Build parts: images first, then text
+	const parts: unknown[] = [];
+	if (images && images.length > 0) {
+		for (const img of images) {
+			parts.push({
+				inlineData: {
+					mimeType: img.mimeType,
+					data: img.base64,
+				},
+			});
+		}
+	}
+	parts.push({ text: noteContent });
+
 	const response = await fetch(url, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -241,7 +297,7 @@ async function callGemini(
 			contents: [
 				{
 					role: "user",
-					parts: [{ text: noteContent }],
+					parts,
 				},
 			],
 			generationConfig: { temperature: 0.7 },
@@ -263,17 +319,18 @@ async function callProvider(
 	apiKey: string,
 	model: string,
 	systemPrompt: string,
-	ollamaBaseUrl?: string
+	ollamaBaseUrl?: string,
+	images?: ImagePayload[]
 ): Promise<string> {
 	switch (provider) {
 		case "openai":
-			return callOpenAI(userMessage, apiKey, model, systemPrompt);
+			return callOpenAI(userMessage, apiKey, model, systemPrompt, images);
 		case "anthropic":
-			return callAnthropic(userMessage, apiKey, model, systemPrompt);
+			return callAnthropic(userMessage, apiKey, model, systemPrompt, images);
 		case "gemini":
-			return callGemini(userMessage, apiKey, model, systemPrompt);
+			return callGemini(userMessage, apiKey, model, systemPrompt, images);
 		case "ollama":
-			return callOllama(userMessage, model, systemPrompt, ollamaBaseUrl);
+			return callOllama(userMessage, model, systemPrompt, ollamaBaseUrl, images);
 	}
 }
 

@@ -1,4 +1,4 @@
-import type { SocraticSageSettings } from "./settings";
+import type { DeepNotesSettings } from "./settings";
 
 export type EmbeddingProvider = "transformers" | "gemini";
 
@@ -46,7 +46,7 @@ async function embedWithGemini(text: string, apiKey: string): Promise<number[]> 
 
 export async function getEmbedding(
     text: string,
-    settings: SocraticSageSettings
+    settings: DeepNotesSettings
 ): Promise<number[]> {
     const provider: EmbeddingProvider = settings.embeddingProvider;
     switch (provider) {

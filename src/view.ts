@@ -1,16 +1,22 @@
 import { ItemView, Notice, WorkspaceLeaf, TFile, debounce } from "obsidian";
-import { VIEW_TYPE_DEEP_NOTES } from "./constants";
+import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult } from "./ai";
 import { getEmbedding } from "./embeddings";
+import { listEmbeddedImages, loadImagesByPaths, resolveExcalidrawEmbeddedImages, extractExcalidrawAnnotations, ImageInfo, ImagePayload } from "./ocr";
 import type DeepNotesPlugin from "./main";
 
 export class DeepNotesView extends ItemView {
 	plugin: DeepNotesPlugin;
 	private items: DeepNotesItem[] = [];
 	private loading = false;
+	private loadingMessage = "";
 	private evaluating = false;
 	private evaluationResult: EvaluationResult | null = null;
 	private textareaRefs: HTMLTextAreaElement[] = [];
+	// Image picker state
+	private showImagePicker = false;
+	private availableImages: ImageInfo[] = [];
+	private selectedImagePaths: Set<string> = new Set();
 
 	constructor(leaf: WorkspaceLeaf, plugin: DeepNotesPlugin) {
 		super(leaf);
@@ -37,6 +43,9 @@ export class DeepNotesView extends ItemView {
 					this.items = [];
 					this.evaluationResult = null;
 					this.textareaRefs = [];
+					this.showImagePicker = false;
+					this.availableImages = [];
+					this.selectedImagePaths.clear();
 					this.render();
 				}, 300)
 			)
@@ -69,19 +78,21 @@ export class DeepNotesView extends ItemView {
 		}
 
 		this.loading = true;
+		this.loadingMessage = "Generating questions from note...";
 		this.evaluationResult = null;
 		this.textareaRefs = [];
 		this.render();
 
 		try {
 			const content = await this.app.vault.read(file);
+			let enrichedContent = content;
 
 			// Search for related notes via vector store
 			let relatedContext = undefined;
 			try {
 				const stats = await this.plugin.vectorStore.getStats();
 				if (stats.totalChunks > 0) {
-					const queryEmbedding = await getEmbedding(content, this.plugin.settings);
+					const queryEmbedding = await getEmbedding(enrichedContent, this.plugin.settings);
 					const results = await this.plugin.vectorStore.search(
 						queryEmbedding,
 						5,
@@ -96,7 +107,7 @@ export class DeepNotesView extends ItemView {
 			}
 
 			this.items = await generateDeepNotesQuestions(
-				content,
+				enrichedContent,
 				provider,
 				activeKey,
 				model,
@@ -112,6 +123,158 @@ export class DeepNotesView extends ItemView {
 			this.render();
 		}
 	}
+
+	private openImagePicker(): void {
+		const file = this.app.workspace.getActiveFile();
+		if (!file) {
+			new Notice("No active note.");
+			return;
+		}
+
+		const content = this.app.vault.getAbstractFileByPath(file.path);
+		if (!content) return;
+
+		// Read note content synchronously from cache if possible
+		this.app.vault.read(file).then((noteContent) => {
+			this.availableImages = listEmbeddedImages(
+				this.app,
+				file,
+				noteContent
+			);
+
+			if (this.availableImages.length === 0) {
+				new Notice("No images found in this note. Embed images with ![[image.png]] syntax.");
+				return;
+			}
+
+			// Pre-select all images
+			this.selectedImagePaths.clear();
+			for (const img of this.availableImages) {
+				this.selectedImagePaths.add(img.path);
+			}
+			this.showImagePicker = true;
+			this.render();
+		});
+	}
+
+	private async triggerImageScan(): Promise<void> {
+		if (this.selectedImagePaths.size === 0) {
+			new Notice("Select at least one image to scan.");
+			return;
+		}
+
+		const { provider, model, ollamaBaseUrl } = this.plugin.settings;
+		const activeKey = this.getActiveKey();
+
+		if (provider !== "ollama" && !activeKey) {
+			new Notice("Please set your API key in Deep Notes settings.");
+			return;
+		}
+
+		this.showImagePicker = false;
+		this.loading = true;
+		this.loadingMessage = `Loading ${this.selectedImagePaths.size} image(s)...`;
+		this.evaluationResult = null;
+		this.textareaRefs = [];
+		this.render();
+
+		try {
+			// Read the note content for context
+			const activeFile = this.app.workspace.getActiveFile();
+			let noteContent = "";
+			if (activeFile) {
+				noteContent = await this.app.vault.read(activeFile);
+			}
+
+			// Separate raster images from excalidraw
+			const selectedPaths = Array.from(this.selectedImagePaths);
+			const rasterPaths = selectedPaths.filter((p) => {
+				const info = this.availableImages.find((i) => i.path === p);
+				return info && !info.isExcalidraw;
+			});
+			const excalidrawPaths = selectedPaths.filter((p) => {
+				const info = this.availableImages.find((i) => i.path === p);
+				return info && info.isExcalidraw;
+			});
+
+			// Load raster images
+			const rasterPayloads = rasterPaths.length > 0
+				? await loadImagesByPaths(this.app, rasterPaths)
+				: [];
+
+			// For Excalidraw: extract the actual embedded screenshots + text annotations
+			let excalidrawImagePayloads: ImagePayload[] = [];
+			let excalidrawAnnotations: string[] = [];
+			if (excalidrawPaths.length > 0) {
+				this.loadingMessage = `Extracting images from ${excalidrawPaths.length} drawing(s)...`;
+				this.render();
+
+				for (const ePath of excalidrawPaths) {
+					// Load the actual embedded screenshots (PNGs/JPGs pasted into the drawing)
+					const embeddedImages = await resolveExcalidrawEmbeddedImages(this.app, ePath);
+					excalidrawImagePayloads.push(...embeddedImages);
+
+					// Extract hand-drawn text annotations for context
+					const annotations = await extractExcalidrawAnnotations(this.app, ePath);
+					if (annotations.trim()) {
+						excalidrawAnnotations.push(`[Annotations from ${ePath}]:\n${annotations}`);
+					}
+				}
+			}
+
+			// Merge all images
+			const allImages = [...rasterPayloads, ...excalidrawImagePayloads];
+
+			if (allImages.length === 0) {
+				new Notice("No images found. Excalidraw drawings without embedded screenshots have no images to scan.");
+				this.loading = false;
+				this.render();
+				return;
+			}
+
+			this.loadingMessage = `Analyzing ${allImages.length} image(s) with ${model}...`;
+			this.render();
+
+			console.log(
+				`[Deep Notes] Sending ${allImages.length} image(s) to ${provider}/${model}:\n` +
+				allImages.map((img, i) => `  [${i + 1}] ${img.path} (${img.mimeType}, ${img.bytes} bytes)`).join("\n")
+			);
+
+			// Build user message — images are PRIMARY, note + annotations are background context
+			const annotationBlock = excalidrawAnnotations.length > 0
+				? `\n\nHand-drawn annotations from the Excalidraw drawings (these are labels/notes the student wrote on top of the images):\n${excalidrawAnnotations.join("\n\n")}`
+				: "";
+
+			let userText = `FOCUS ON THE IMAGES. Generate questions about what the image(s) show — the diagrams, formulas, calculations, and visual content.${annotationBlock}
+
+For background context only (do NOT generate questions about this text directly), here is the note this image belongs to:
+
+${noteContent}`;
+
+			this.items = await generateDeepNotesQuestions(
+				userText,
+				provider,
+				activeKey,
+				model,
+				IMAGE_SCAN_SYSTEM_PROMPT,
+				ollamaBaseUrl,
+				undefined,
+				allImages.length > 0 ? allImages : undefined
+			);
+
+			if (this.items.length === 0) {
+				new Notice("No questions generated. Make sure you're using a vision model for image scanning.");
+			}
+		} catch (e) {
+			new Notice(`Image scan error: ${e instanceof Error ? e.message : e}`);
+			this.items = [];
+		} finally {
+			this.loading = false;
+			this.render();
+		}
+	}
+
+	// renderOcrStatus removed — replaced by Scan Images button
 
 	private async triggerEvaluation(): Promise<void> {
 		const { provider, model, ollamaBaseUrl } = this.plugin.settings;
@@ -277,7 +440,7 @@ export class DeepNotesView extends ItemView {
 		if (this.loading) {
 			container.createDiv({
 				cls: "deep-notes-loading",
-				text: "Generating questions...",
+				text: this.loadingMessage || "Generating questions...",
 			});
 			return;
 		}
@@ -291,11 +454,26 @@ export class DeepNotesView extends ItemView {
 		}
 
 		if (this.items.length === 0) {
-			const btn = container.createEl("button", {
-				text: "Generate Deep Notes Questions",
+			// Image picker view
+			if (this.showImagePicker) {
+				this.renderImagePicker(container);
+				return;
+			}
+
+			// Two main action buttons
+			const btnGroup = container.createDiv({ cls: "deep-notes-btn-group" });
+
+			const genBtn = btnGroup.createEl("button", {
+				text: "Generate Questions",
 				cls: "deep-notes-generate-btn",
 			});
-			btn.addEventListener("click", () => this.triggerGeneration());
+			genBtn.addEventListener("click", () => this.triggerGeneration());
+
+			const scanBtn = btnGroup.createEl("button", {
+				text: "Scan Images",
+				cls: "deep-notes-generate-btn deep-notes-scan-btn",
+			});
+			scanBtn.addEventListener("click", () => this.openImagePicker());
 
 			// Show index status
 			this.renderIndexStatus(container);
@@ -409,6 +587,101 @@ export class DeepNotesView extends ItemView {
 			cls: "deep-notes-generate-btn deep-notes-regenerate",
 		});
 		resetBtn.addEventListener("click", () => this.triggerGeneration());
+	}
+
+	private renderImagePicker(container: HTMLElement): void {
+		const picker = container.createDiv({ cls: "deep-notes-image-picker" });
+
+		// Header: title + select all/none inline
+		const headerRow = picker.createDiv({ cls: "deep-notes-picker-header" });
+		headerRow.createEl("span", { text: "Select images", cls: "deep-notes-picker-title" });
+
+		const controls = headerRow.createDiv({ cls: "deep-notes-picker-controls" });
+		const selectAllBtn = controls.createEl("button", {
+			text: "All",
+			cls: "deep-notes-picker-action",
+		});
+		selectAllBtn.addEventListener("click", () => {
+			for (const img of this.availableImages) {
+				this.selectedImagePaths.add(img.path);
+			}
+			this.render();
+		});
+		const selectNoneBtn = controls.createEl("button", {
+			text: "None",
+			cls: "deep-notes-picker-action",
+		});
+		selectNoneBtn.addEventListener("click", () => {
+			this.selectedImagePaths.clear();
+			this.render();
+		});
+
+		// Image list
+		const list = picker.createDiv({ cls: "deep-notes-picker-list" });
+		for (const img of this.availableImages) {
+			const row = list.createDiv({ cls: "deep-notes-picker-row" });
+
+			const label = row.createEl("label", { cls: "deep-notes-picker-label" });
+			const cb = label.createEl("input", {
+				type: "checkbox",
+				cls: "deep-notes-picker-checkbox",
+			}) as HTMLInputElement;
+			cb.checked = this.selectedImagePaths.has(img.path);
+			cb.addEventListener("change", () => {
+				if (cb.checked) {
+					this.selectedImagePaths.add(img.path);
+				} else {
+					this.selectedImagePaths.delete(img.path);
+				}
+				// Update count display
+				const countEl = picker.querySelector(".deep-notes-picker-count");
+				if (countEl) {
+					countEl.textContent = `${this.selectedImagePaths.size} of ${this.availableImages.length} selected`;
+				}
+				const scanBtnEl = picker.querySelector(".deep-notes-scan-selected-btn");
+				if (scanBtnEl) {
+					(scanBtnEl as HTMLButtonElement).disabled = this.selectedImagePaths.size === 0;
+				}
+			});
+
+			const displayName = img.isExcalidraw
+				? img.name.replace(/\.excalidraw$/i, "")
+				: `${img.name}.${img.extension}`;
+			label.createEl("span", {
+				text: displayName,
+				cls: "deep-notes-picker-name",
+			});
+
+			const badgeText = img.isExcalidraw ? "drawing" : img.extension.toLowerCase();
+			label.createEl("span", {
+				text: badgeText,
+				cls: "deep-notes-picker-badge",
+			});
+		}
+
+		// Selection count
+		picker.createEl("span", {
+			text: `${this.selectedImagePaths.size} of ${this.availableImages.length} selected`,
+			cls: "deep-notes-picker-count",
+		});
+
+		// Action buttons
+		const actions = picker.createDiv({ cls: "deep-notes-picker-actions" });
+		const scanBtn = actions.createEl("button", {
+			text: "Scan",
+			cls: "deep-notes-generate-btn deep-notes-scan-selected-btn",
+		}) as HTMLButtonElement;
+		scanBtn.disabled = this.selectedImagePaths.size === 0;
+		scanBtn.addEventListener("click", () => this.triggerImageScan());
+
+		const cancelBtn = actions.createEl("button", {
+			text: "Cancel",
+			cls: "deep-notes-generate-btn",
+		});
+		cancelBtn.addEventListener("click", () => {
+			this.showImagePicker = false;
+			this.render();
+		});
 	}
 
 	private async renderIndexStatus(container: HTMLElement): Promise<void> {

@@ -14,8 +14,13 @@ export interface DeepNotesSettings {
 	apiKey: string;
 	anthropicApiKey: string;
 	geminiApiKey: string;
-	ollamaBaseUrl: string;
+	ollamaBaseUrl: string; 
 	model: string;
+	imageOcrEnabled: boolean;
+	imageOcrVisionModel: string;
+	imageOcrMaxImages: number;
+	imageOnlyMode: boolean;
+	ocrDebugEnabled: boolean;
 	systemPrompt: string;
 	embeddingProvider: EmbeddingProvider;
 }
@@ -27,6 +32,11 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	geminiApiKey: "",
 	ollamaBaseUrl: "http://127.0.0.1:11434",
 	model: "gpt-4o-mini",
+	imageOcrEnabled: false,
+	imageOcrVisionModel: "llava:latest",
+	imageOcrMaxImages: 5,
+	imageOnlyMode: false,
+	ocrDebugEnabled: false,
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
 	embeddingProvider: "transformers",
 };
@@ -156,6 +166,38 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		containerEl.createEl("h2", { text: "Image Scanning" });
+
+		new Setting(containerEl)
+			.setName("Vision model")
+			.setDesc("Ollama vision model for image scanning (e.g. llava:latest). Only used with the 'Scan Images' button.")
+			.addText((text) =>
+				text
+					.setPlaceholder("llava:latest")
+					.setValue(this.plugin.settings.imageOcrVisionModel)
+					.onChange(async (value) => {
+						this.plugin.settings.imageOcrVisionModel = value.trim() || "llava:latest";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Max images per scan")
+			.setDesc("Maximum number of images to process when scanning.")
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 20, 1)
+					.setValue(this.plugin.settings.imageOcrMaxImages)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.imageOcrMaxImages = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		const scanInfo = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
+		scanInfo.setText("Image scanning sends embedded images directly to your AI model. For Ollama, pull a vision model first: ollama pull llava:latest");
 
 		// --- Cross-Topic Search ---
 		containerEl.createEl("h2", { text: "Cross-Topic Search" });

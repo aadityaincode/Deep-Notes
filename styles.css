@@ -11,15 +11,15 @@
 	width: 100%;
 	padding: 8px 16px;
 	cursor: pointer;
-	background-color: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border: none;
+	background-color: var(--background-secondary-alt);
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
 	font-size: 14px;
 }
 
 .deep-notes-generate-btn:hover {
-	background-color: var(--interactive-accent-hover);
+	background-color: var(--background-modifier-hover);
 }
 
 .deep-notes-regenerate {
@@ -53,19 +53,18 @@
 }
 
 .deep-notes-badge-knowledge-expansion {
-	background-color: var(--interactive-accent);
-	color: var(--text-on-accent);
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
 }
 
 .deep-notes-badge-suggestion {
-	background-color: var(--background-modifier-success);
-	color: var(--text-normal);
-	border-color: var(--background-modifier-border-hover);
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
 }
 
 .deep-notes-badge-cross-topic {
-	background-color: rgba(124, 77, 255, 0.2);
-	color: #7c4dff;
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
 }
 
 .deep-notes-text {
@@ -91,15 +90,15 @@
 .deep-notes-add-btn {
 	padding: 6px 12px;
 	cursor: pointer;
-	background-color: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border: none;
+	background-color: var(--background-secondary-alt);
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
 	font-size: 13px;
 }
 
 .deep-notes-add-btn:hover {
-	background-color: var(--interactive-accent-hover);
+	background-color: var(--background-modifier-hover);
 }
 
 /* Evaluate button */
@@ -210,6 +209,17 @@
 	font-weight: 400;
 }
 
+.deep-notes-setting-warning {
+	margin: 8px 0 16px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 12px;
+	line-height: 1.4;
+}
+
 /* Source note link */
 .deep-notes-source-link {
 	display: block;
@@ -248,10 +258,127 @@
 	margin-top: 4px;
 }
 
+.deep-notes-btn-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.deep-notes-scan-btn {
+	background-color: var(--background-secondary-alt) !important;
+}
+
 /* Settings warning */
 .deep-notes-setting-warning {
 	color: var(--text-warning, #ffc107);
 	font-size: 13px;
 	padding: 8px;
 	margin-top: 4px;
+}
+
+/* Image picker */
+.deep-notes-image-picker {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.deep-notes-picker-title {
+	margin: 0 0 4px 0;
+	font-size: 14px;
+	color: var(--text-normal);
+}
+
+.deep-notes-picker-controls {
+	display: flex;
+	gap: 8px;
+}
+
+.deep-notes-picker-action {
+	background: none;
+	border: none;
+	color: var(--text-accent);
+	cursor: pointer;
+	font-size: 12px;
+	padding: 2px 4px;
+	text-decoration: underline;
+}
+
+.deep-notes-picker-action:hover {
+	color: var(--text-accent-hover);
+}
+
+.deep-notes-picker-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 200px;
+	overflow-y: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 6px;
+}
+
+.deep-notes-picker-row {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 4px 6px;
+	border-radius: 4px;
+}
+
+.deep-notes-picker-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.deep-notes-picker-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	font-size: 13px;
+	color: var(--text-normal);
+}
+
+.deep-notes-picker-checkbox {
+	flex-shrink: 0;
+}
+
+.deep-notes-picker-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.deep-notes-picker-badge {
+	flex-shrink: 0;
+	font-size: 10px;
+	padding: 1px 5px;
+	border-radius: 4px;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.deep-notes-picker-badge-img {
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+
+.deep-notes-picker-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 4px;
+}
+
+.deep-notes-picker-actions .deep-notes-generate-btn {
+	flex: 1;
+	min-width: 0;
+	text-align: center;
+	padding: 8px 12px;
+	font-size: 13px;
+	box-sizing: border-box;
 }

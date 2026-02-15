@@ -7,6 +7,7 @@ An Obsidian plugin that uses AI to generate deep questions from your notes, eval
 - **Deep Question Generation** — Generates 3-5 thought-provoking questions and suggestions from any note using AI
 - **Multi-Provider Support** — Works with OpenAI, Anthropic (Claude), and Google Gemini
 - **Local Ollama Support** — Run models locally without API keys or billing
+- **Image OCR Context** — Extracts text from embedded images and includes it in question generation context
 - **AI-Powered Evaluation** — Submit your responses and get a percentage-based understanding score with per-question feedback
 - **Spaced Repetition Scheduling** — Automatically computes a review date based on your score and appends a review reminder to your daily note
 - **Calendar Integration** — Works with [Liam Cain's Calendar plugin](https://github.com/liamcain/obsidian-calendar-plugin) to show review dates as dots on your calendar
@@ -78,6 +79,25 @@ ollama list
 	- Set **Ollama Base URL** to `http://127.0.0.1:11434`
 	- Set model to one from `ollama list` (recommended: `llama3.2:latest`)
 2. Use the plugin normally; no API key is required for Ollama.
+
+## OCR for Images in Notes
+
+If your note references screenshots or photos with text, Deep Notes can OCR those images and include the extracted text in generation.
+
+1. Pull a vision model in Ollama:
+
+```bash
+ollama pull llava:latest
+```
+
+2. In **Settings > Deep Notes**:
+	- Enable **Image OCR**
+	- Set **Vision model** to `llava:latest` (or another local vision model)
+	- Set **Max images per note** (recommended: 3)
+
+3. Keep the referenced images in your vault and embed them in markdown (for example `![[image.png]]` or `![](path/to/image.png)`).
+
+When generation runs, OCR text is appended to the note context under `Text Extracted from Referenced Images`.
 
 ### Ollama implementation notes
 
