@@ -139,51 +139,211 @@ async function findOllamaFallbackModel(model: string, normalizedBase: string): P
 }
 
 function parseResponse(content: string): DeepNotesItem[] {
-	// 1. Try to find JSON inside markdown code blocks first
-	const codeBlockMatch = content.match(/```(?:json)?\s*(\[\s*\{[\s\S]*\}\s*\])\s*```/i);
-	let jsonCandidate = codeBlockMatch ? codeBlockMatch[1] : null;
+	const normalized = stripCodeFences(content).trim();
+	const candidates = extractJsonCandidates(content, normalized);
 
-	// 2. If no code block, try to find the outer brackets
-	if (!jsonCandidate) {
-		const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
-		if (jsonMatch) {
-			jsonCandidate = jsonMatch[0];
-		}
-	}
-
-	if (jsonCandidate) {
+	for (const candidate of candidates) {
 		try {
-			// 3. Clean up common LLM JSON errors
-			// Remove trailing commas before closing braces/brackets
-			const cleaned = jsonCandidate
-				.replace(/,\s*([\]}])/g, "$1") // trailing commas
-				.replace(/[\x00-\x1F\x7F]/g, (c) => { // control chars (except whitespace)
-					return ["\r", "\n", "\t"].includes(c) ? c : "";
-				});
-
+			const cleaned = cleanJsonCandidate(candidate);
 			const parsed = JSON.parse(cleaned);
-			if (Array.isArray(parsed)) {
-				return parsed.map((item: { type?: string; text?: string; sourceExcerpt?: string; sourceNote?: string }) => ({
-					type: item.type === "knowledge-expansion" || item.type === "question"
-						? "knowledge-expansion"
-						: item.type === "cross-topic"
-							? "cross-topic"
-							: "suggestion",
-					text: item.text ?? "",
-					sourceExcerpt: item.sourceExcerpt,
-					sourceNote: item.sourceNote,
-				}));
+			const items = parseDeepNotesItems(parsed);
+			if (items.length > 0) {
+				return items;
 			}
 		} catch (e) {
 			console.warn("Deep Notes: JSON parse failed", e);
-			// fall through to fallback
 		}
 	}
 
-	// Fallback: If parsing fails, try to present the content reasonably
-	// If it looks like code, strip the ticks for display
-	const cleanText = content.replace(/```json/g, "").replace(/```/g, "").trim();
-	return [{ type: "suggestion", text: cleanText }];
+	const textFieldItems = extractTextFieldsFromJsonLikeText(normalized);
+	if (textFieldItems.length > 0) {
+		return textFieldItems;
+	}
+
+	const listItems = parseListItemsFromText(normalized);
+	if (listItems.length > 0) {
+		return listItems.map((text) => ({ type: "knowledge-expansion", text }));
+	}
+
+	if (!normalized) {
+		return [];
+	}
+
+	return [{ type: "suggestion", text: toHumanReadableText(normalized) }];
+}
+
+function stripCodeFences(content: string): string {
+	return content.replace(/```(?:json)?/gi, "").replace(/```/g, "");
+}
+
+function cleanJsonCandidate(candidate: string): string {
+	return candidate
+		.replace(/,\s*([\]}])/g, "$1")
+		.replace(/[\x00-\x1F\x7F]/g, (c) => (["\r", "\n", "\t"].includes(c) ? c : ""));
+}
+
+function extractJsonCandidates(raw: string, normalized: string): string[] {
+	const candidates: string[] = [];
+
+	const blockRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+	let blockMatch: RegExpExecArray | null = null;
+	while ((blockMatch = blockRegex.exec(raw)) !== null) {
+		const block = blockMatch[1]?.trim();
+		if (block && (block.startsWith("[") || block.startsWith("{"))) {
+			candidates.push(block);
+		}
+	}
+
+	if (normalized.startsWith("[") || normalized.startsWith("{")) {
+		candidates.push(normalized);
+	}
+
+	const arrayMatch = normalized.match(/\[[\s\S]*\]/);
+	if (arrayMatch) {
+		candidates.push(arrayMatch[0]);
+	}
+
+	const objectMatch = normalized.match(/\{[\s\S]*\}/);
+	if (objectMatch) {
+		candidates.push(objectMatch[0]);
+	}
+
+	return Array.from(new Set(candidates.map((c) => c.trim()).filter(Boolean)));
+}
+
+function parseDeepNotesItems(parsed: unknown): DeepNotesItem[] {
+	if (Array.isArray(parsed)) {
+		return parsed
+			.map((entry) => normalizeDeepNotesItem(entry))
+			.filter((item): item is DeepNotesItem => item !== null);
+	}
+
+	if (parsed && typeof parsed === "object") {
+		const obj = parsed as Record<string, unknown>;
+		for (const key of ["items", "questions", "suggestions", "results", "data"]) {
+			if (Array.isArray(obj[key])) {
+				return (obj[key] as unknown[])
+					.map((entry) => normalizeDeepNotesItem(entry))
+					.filter((item): item is DeepNotesItem => item !== null);
+			}
+		}
+
+		const single = normalizeDeepNotesItem(obj);
+		if (single) {
+			return [single];
+		}
+	}
+
+	return [];
+}
+
+function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
+	if (typeof entry === "string") {
+		const text = toHumanReadableText(entry);
+		return text ? { type: "knowledge-expansion", text } : null;
+	}
+
+	if (!entry || typeof entry !== "object") {
+		return null;
+	}
+
+	const item = entry as Record<string, unknown>;
+	const rawText = item.text ?? item.question ?? item.prompt ?? item.suggestion ?? item.content;
+	if (typeof rawText !== "string") {
+		return null;
+	}
+
+	const text = toHumanReadableText(rawText);
+	if (!text) {
+		return null;
+	}
+
+	const rawType = String(item.type ?? item.kind ?? item.category ?? "").toLowerCase();
+	const type: DeepNotesItem["type"] =
+		rawType === "knowledge-expansion" || rawType === "question"
+			? "knowledge-expansion"
+			: rawType === "cross-topic"
+				? "cross-topic"
+				: "suggestion";
+
+	const sourceExcerpt =
+		typeof item.sourceExcerpt === "string"
+			? item.sourceExcerpt
+			: typeof item.excerpt === "string"
+				? item.excerpt
+				: typeof item.quote === "string"
+					? item.quote
+					: undefined;
+
+	const sourceNote =
+		typeof item.sourceNote === "string"
+			? item.sourceNote
+			: typeof item.note === "string"
+				? item.note
+				: typeof item.relatedNote === "string"
+					? item.relatedNote
+					: undefined;
+
+	return { type, text, sourceExcerpt, sourceNote };
+}
+
+function extractTextFieldsFromJsonLikeText(content: string): DeepNotesItem[] {
+	const matches = Array.from(content.matchAll(/"text"\s*:\s*"([\s\S]*?)"/g));
+	if (matches.length === 0) {
+		return [];
+	}
+
+	const items = matches
+		.map((m) => decodeJsonString(m[1]))
+		.map((text) => toHumanReadableText(text))
+		.filter((text) => text.length > 0)
+		.map((text) => ({ type: "knowledge-expansion", text } as DeepNotesItem));
+
+	return items;
+}
+
+function decodeJsonString(value: string): string {
+	try {
+		return JSON.parse(`"${value.replace(/"/g, '\\"')}"`);
+	} catch {
+		return value;
+	}
+}
+
+function parseListItemsFromText(content: string): string[] {
+	const lines = content
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0);
+
+	const parsed = lines
+		.map((line) => {
+			const bullet = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/);
+			if (bullet) {
+				return bullet[1];
+			}
+
+			const label = line.match(/^(?:q(?:uestion)?\s*\d*[:.-]|suggestion\s*\d*[:.-])\s*(.+)$/i);
+			return label ? label[1] : "";
+		})
+		.map((line) => toHumanReadableText(line))
+		.filter((line) => line.length > 0);
+
+	return parsed.length >= 2 ? parsed : [];
+}
+
+function toHumanReadableText(value: string): string {
+	return value
+		.replace(/\\n/g, " ")
+		.replace(/\\t/g, " ")
+		.replace(/\\r/g, " ")
+		.replace(/\\"/g, '"')
+		.replace(/^[\s"'`]+|[\s"'`]+$/g, "")
+		.replace(/^(?:[-*•]|\d+[.)])\s+/, "")
+		.replace(/\*\*/g, "")
+		.replace(/`/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 async function callOpenAI(
