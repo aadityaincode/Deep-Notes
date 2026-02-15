@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import {
 	AIProvider,
 	PROVIDERS,
@@ -19,6 +19,7 @@ export interface DeepNotesSettings {
 	model: string;
 	systemPrompt: string;
 	embeddingProvider: EmbeddingProvider;
+	ollamaEmbeddingModel: string;
 	history: QASession[];
 }
 
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	model: "gpt-4o-mini",
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
 	embeddingProvider: "gemini",
+	ollamaEmbeddingModel: "nomic-embed-text",
 	history: [],
 };
 
@@ -51,7 +53,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		// --- AI Provider ---
 		new Setting(containerEl)
 			.setName("AI Provider")
-			.setDesc("Choose which AI provider to use.")
+			.setDesc("Choose which AI provider to use for generation.")
 			.addDropdown((dropdown) => {
 				for (const p of PROVIDERS) {
 					dropdown.addOption(p.value, p.label);
@@ -160,25 +162,92 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// --- Cross-Topic Search ---
-		containerEl.createEl("h2", { text: "Cross-Topic Search" });
+		// --- Cross-Topic Search (Embeddings) ---
+		containerEl.createEl("h2", { text: "Cross-Topic Search (Embeddings)" });
+
+		// Warning about changing providers
+		const warningDiv = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
+		warningDiv.setText("⚠️ IMPORTANT: If you change the embedding provider or model, you MUST run the 'Clear Semantic Search Index' command and re-index your vault. Otherwise, search will fail.");
+		warningDiv.style.color = "var(--text-error)";
+		warningDiv.style.marginBottom = "10px";
+		warningDiv.style.fontSize = "0.9em";
 
 		new Setting(containerEl)
-			.setName("Embedding Model")
-			.setDesc(
-				"Deep Notes now uses Google Gemini for embeddings (768 dimensions). This requires a Gemini API key."
-			)
-			.addText((text) =>
-				text
-					.setValue("gemini-embedding-001")
-					.setDisabled(true)
-			);
+			.setName("Embedding Provider")
+			.setDesc("Choose which provider to use for embeddings.")
+			.addDropdown((dropdown) => {
+				dropdown.addOption("gemini", "Google Gemini (768d)");
+				dropdown.addOption("ollama", "Ollama (Local)");
+				dropdown
+					.setValue(this.plugin.settings.embeddingProvider)
+					.onChange(async (value) => {
+						this.plugin.settings.embeddingProvider = value as EmbeddingProvider;
+						await this.plugin.saveSettings();
+						this.display(); // Re-render to show/hide options
+						new Notice("Provider changed. Please clear and re-index your vault.");
+					});
+			});
 
-		if (!this.plugin.settings.geminiApiKey) {
-			const warning = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
-			warning.setText("⚠️ Gemini API Key is required for Cross-Topic Search. Please set it above.");
-			warning.style.color = "var(--text-error)";
-			warning.style.marginTop = "10px";
+		if (this.plugin.settings.embeddingProvider === "gemini") {
+			new Setting(containerEl)
+				.setName("Gemini Embedding Model")
+				.setDesc("Uses 'gemini-embedding-001' (768 dimensions). Requires API Key.")
+				.addText((text) => text.setValue("gemini-embedding-001").setDisabled(true));
+
+			if (!this.plugin.settings.geminiApiKey) {
+				const w = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
+				w.setText("⚠️ Gemini API Key is required. Please set it under 'AI Provider' (temporarily switch if needed) or check if you have separate keys logic.");
+				w.style.color = "var(--text-error)";
+				// Ideally we should allow setting Gemini key here if provider != Gemini
+				// But simplified for now: assume user sets key in main provider section if using Gemini there.
+				// Or better: Add a separate Gemini Key field if embedding is Gemini but main provider is NOT Gemini?
+				// The current settings.ts only shows Gemini Key field if main provider IS Gemini.
+				// FIX: Look at main provider key logic below.
+			}
+		} else {
+			// Ollama
+			new Setting(containerEl)
+				.setName("Ollama Embedding Model")
+				.setDesc("Name of the Ollama model to use for embeddings (e.g., 'nomic-embed-text', 'mxbai-embed-large'). Ensure you have pulled this model (`ollama pull <model>`).")
+				.addText((text) =>
+					text
+						.setPlaceholder("nomic-embed-text")
+						.setValue(this.plugin.settings.ollamaEmbeddingModel)
+						.onChange(async (value) => {
+							this.plugin.settings.ollamaEmbeddingModel = value.trim();
+							await this.plugin.saveSettings();
+						})
+				);
+
+			new Setting(containerEl)
+				.setName("Ollama Base URL")
+				.setDesc("Re-uses the Base URL set above.")
+				.addText((text) => text.setValue(this.plugin.settings.ollamaBaseUrl).setDisabled(true));
+		}
+
+		// Logic to ensure Gemini API key is visible/set-able if Embedding Provider is Gemini
+		// Current logic: only shows key field if MAIN provider is Gemini.
+		// I should ALWAYS show Gemini Key field if EITHER main provider OR embedding provider is Gemini?
+		// Or add a dedicated "Gemini Embeddings Key" field if strictly needed?
+		// Let's modify the top loop to show Gemini key if needed.
+		// Actually, user can switch to Gemini, set key, switch back to OpenAI. The key persists in settings.
+		// But the UI hides it.
+		// I'll add a check: if embeddingProvider is Gemini, and main provider is NOT Gemini, show Gemini Key field here.
+
+		if (this.plugin.settings.embeddingProvider === "gemini" && this.plugin.settings.provider !== "gemini") {
+			new Setting(containerEl)
+				.setName("Gemini API Key (for Embeddings)")
+				.setDesc("Required for Gemini embeddings.")
+				.addText((text) =>
+					text
+						.setPlaceholder("AI...")
+						.setValue(this.plugin.settings.geminiApiKey)
+						.then((t) => (t.inputEl.type = "password"))
+						.onChange(async (value) => {
+							this.plugin.settings.geminiApiKey = value.trim();
+							await this.plugin.saveSettings();
+						})
+				);
 		}
 	}
 }

@@ -8,6 +8,7 @@ import {
 import { DeepNotesView } from "./view";
 import { VaultVectorStore } from "./vectorStore";
 import { VaultIndexer } from "./indexer";
+import { deepNotesHighlightField } from "./highlights";
 
 export default class DeepNotesPlugin extends Plugin {
 	settings: DeepNotesSettings = DEFAULT_SETTINGS;
@@ -135,6 +136,9 @@ export default class DeepNotesPlugin extends Plugin {
 		);
 
 		this.addSettingTab(new DeepNotesSettingTab(this.app, this));
+
+		// Register CM6 editor extension for highlights
+		this.registerEditorExtension(deepNotesHighlightField);
 	}
 
 	onunload(): void {

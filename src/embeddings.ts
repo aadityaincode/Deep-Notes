@@ -1,6 +1,6 @@
 import type { DeepNotesSettings } from "./settings";
 
-export type EmbeddingProvider = "gemini";
+export type EmbeddingProvider = "gemini" | "ollama";
 
 async function embedWithGemini(text: string, apiKey: string): Promise<number[]> {
     if (!apiKey) {
@@ -31,15 +31,53 @@ async function embedWithGemini(text: string, apiKey: string): Promise<number[]> 
     return data.embedding?.values ?? [];
 }
 
+async function embedWithOllama(
+    text: string,
+    model: string,
+    baseUrl: string
+): Promise<number[]> {
+    const normalizedBase = baseUrl.replace(/\/$/, "");
+    const url = `${normalizedBase}/api/embeddings`;
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model: model,
+            prompt: text,
+        }),
+    });
+
+    if (!response.ok) {
+        let err = await response.text();
+        // Handle model not found error gracefully
+        if (response.status === 404 && /not found/i.test(err)) {
+            throw new Error(
+                `Ollama model "${model}" was not found locally. Run: ollama pull ${model}`
+            );
+        }
+        throw new Error(`Ollama Embedding API error (${response.status}): ${err}`);
+    }
+
+    const data = await response.json();
+    if (!data.embedding || !Array.isArray(data.embedding)) {
+        throw new Error("Ollama response missing 'embedding' array.");
+    }
+    return data.embedding;
+}
+
 export async function getEmbedding(
     text: string,
     settings: DeepNotesSettings
 ): Promise<number[]> {
-    // Intentionally ignore settings.embeddingProvider and force Gemini
-    // Clean up settings later if needed
-    return embedWithGemini(text, settings.geminiApiKey);
-}
+    if (settings.embeddingProvider === "ollama") {
+        return embedWithOllama(
+            text,
+            settings.ollamaEmbeddingModel || "nomic-embed-text",
+            settings.ollamaBaseUrl || "http://127.0.0.1:11434"
+        );
+    }
 
-export function getEmbeddingDimension(): number {
-    return 768; // Gemini embedding-001
+    // Default to Gemini
+    return embedWithGemini(text, settings.geminiApiKey);
 }

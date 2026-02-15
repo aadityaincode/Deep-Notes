@@ -62,7 +62,7 @@ export class DeepNotesView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.saveCurrentStateToCache();
-		clearAllHighlights();
+		clearAllHighlights(this.app);
 		this.contentEl.empty();
 	}
 
@@ -87,7 +87,7 @@ export class DeepNotesView extends ItemView {
 		// If changing files, save state of the OLD file
 		if (this.lastNotePath && this.lastNotePath !== newPath) {
 			this.saveCurrentStateToCache();
-			clearAllHighlights();
+			clearAllHighlights(this.app);
 		}
 
 		this.lastNotePath = newPath;
@@ -132,7 +132,7 @@ export class DeepNotesView extends ItemView {
 
 	private applyQuestionHighlights(): void {
 		if (this.items.length === 0) {
-			clearAllHighlights();
+			clearAllHighlights(this.app);
 			return;
 		}
 
@@ -502,7 +502,7 @@ export class DeepNotesView extends ItemView {
 			this.evaluationResult = null;
 			this.currentResponses = [];
 			this.viewMode = "questions";
-			clearAllHighlights();
+			clearAllHighlights(this.app);
 			this.render();
 			new Notice("Session cleared.");
 		});

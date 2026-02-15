@@ -1,9 +1,9 @@
-import { MarkdownView, App } from "obsidian";
+import { App, MarkdownView } from "obsidian";
+import { StateField, StateEffect } from "@codemirror/state";
+import { Decoration, DecorationSet, EditorView } from "@codemirror/view";
 
-/**
- * Color palette for question highlights.
- * Each question gets a unique color matching its sidebar card indicator.
- */
+// --- Color Palette ---
+
 export const HIGHLIGHT_COLORS = [
     { bg: "rgba(255, 107, 107, 0.35)", border: "#ff6b6b", name: "red" },
     { bg: "rgba(78, 205, 196, 0.35)", border: "#4ecdc4", name: "teal" },
@@ -16,41 +16,178 @@ export const HIGHLIGHT_COLORS = [
 ];
 
 /**
- * Find the character offset of an excerpt in text.
- * Tries exact match, case-insensitive, and normalized whitespace.
+ * Data structure for a highlighted item passed from the view.
  */
-function findExcerptInText(
+interface HighlightData {
+    text: string;
+    colorIndex: number;
+}
+
+// --- CM6 State Field & Effect ---
+
+// Effect to set the current list of highlights
+export const setHighlightsEffect = StateEffect.define<HighlightData[]>();
+
+interface HighlightState {
+    decorations: DecorationSet;
+    items: HighlightData[];
+}
+
+export const deepNotesHighlightField = StateField.define<HighlightState>({
+    create() {
+        return { decorations: Decoration.none, items: [] };
+    },
+    update(oldState, tr) {
+        let items = oldState.items;
+        let didWait = false;
+
+        // Check for new effects
+        for (const e of tr.effects) {
+            if (e.is(setHighlightsEffect)) {
+                items = e.value;
+                didWait = true; // Signal we changed items
+            }
+        }
+
+        // If items changed OR doc changed, we re-calculate decorations
+        if (didWait || tr.docChanged) {
+            return {
+                items,
+                decorations: buildDecorations(items, tr.newDoc.toString()),
+            };
+        }
+
+        return oldState;
+    },
+    provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+});
+
+/**
+ * Build the DecorationSet based on the list of excerpts and document text.
+ */
+function buildDecorations(items: HighlightData[], docText: string): DecorationSet {
+    const builder: { from: number; to: number; decoration: Decoration }[] = [];
+    const maskedDoc = maskMarkdownSyntax(docText);
+
+    for (const item of items) {
+        // Try on original first
+        let range = findExcerpt(docText, item.text);
+
+        // Fallback: Try masked doc with original excerpt (LLM strips formatting)
+        if (!range) {
+            range = findExcerpt(maskedDoc, item.text);
+        }
+
+        // Fallback: Try masked doc with masked excerpt (LLM includes formatting)
+        if (!range) {
+            range = findExcerpt(maskedDoc, maskMarkdownSyntax(item.text));
+        }
+
+        if (range) {
+            // Expand range to include surrounding markdown syntax (e.g. **Bold**)
+            range = expandRangeToMarkdownSyntax(docText, range);
+
+            const color = HIGHLIGHT_COLORS[item.colorIndex % HIGHLIGHT_COLORS.length];
+            const decoration = Decoration.mark({
+                attributes: {
+                    style: `
+                        background-color: ${color.bg}; 
+                        border-bottom: 2px solid ${color.border};
+                        border-radius: 2px;
+                    `,
+                    class: "deep-notes-cm6-highlight"
+                },
+            });
+            builder.push({
+                from: range.from,
+                to: range.to,
+                decoration,
+            });
+        }
+    }
+
+    // Sort by position (required by CM6)
+    builder.sort((a, b) => a.from - b.from);
+
+    return Decoration.set(builder.map(b => b.decoration.range(b.from, b.to)));
+}
+
+// --- Text Matching Logic ---
+
+/**
+ * Helper to replace markdown syntax chars with spaces to allow fuzzy matching.
+ */
+function maskMarkdownSyntax(text: string): string {
+    return text.replace(/[*#_\[\]`>~=]/g, " ");
+}
+
+/**
+ * Expands the matched range to include surrounding markdown formatting characters.
+ * E.g. "Bold" -> "**Bold**", "Title" -> "## Title"
+ */
+function expandRangeToMarkdownSyntax(
     docText: string,
+    range: { from: number; to: number }
+): { from: number; to: number } {
+    let { from, to } = range;
+
+    const isFormattingChar = (char: string) => /[*_=\[\]`~]/.test(char);
+
+    // 1. Expand tight formatting left (e.g. **)
+    while (from > 0 && isFormattingChar(docText[from - 1])) {
+        from--;
+    }
+
+    // 2. Expand tight formatting right (e.g. **)
+    while (to < docText.length && isFormattingChar(docText[to])) {
+        to++;
+    }
+
+    // 3. Check for Heading/List markers (hash or dash followed by space)
+    // Look backwards from current 'from' excluding whitespace
+    // Simplification: Check immediate preceding string
+    const preceding = docText.slice(Math.max(0, from - 10), from);
+    const headingMatch = preceding.match(/([#\-]+[ \t]+)$/);
+    if (headingMatch) {
+        from -= headingMatch[1].length;
+    }
+
+    return { from, to };
+}
+
+function findExcerpt(
+    searchEl: string,
     excerpt: string
 ): { from: number; to: number } | null {
     if (!excerpt || excerpt.length < 3) return null;
 
-    // Exact match
-    let idx = docText.indexOf(excerpt);
+    // 1. Exact match
+    let idx = searchEl.indexOf(excerpt);
     if (idx >= 0) return { from: idx, to: idx + excerpt.length };
 
-    // Case-insensitive
-    const lower = docText.toLowerCase();
+    // 2. Case-insensitive
+    const lower = searchEl.toLowerCase();
     const excerptLower = excerpt.toLowerCase().trim();
     idx = lower.indexOf(excerptLower);
     if (idx >= 0) return { from: idx, to: idx + excerptLower.length };
 
-    // Normalized whitespace (collapse \n, \t, multi-spaces)
+    // 3. Normalized whitespace
     const normalized = excerptLower.replace(/\s+/g, " ");
     const normalizedDoc = lower.replace(/\s+/g, " ");
     idx = normalizedDoc.indexOf(normalized);
+
     if (idx >= 0) {
-        // Map back to original position — find the nth non-collapsed char
+        // Map back indices
         let origIdx = 0;
         let normIdx = 0;
-        while (normIdx < idx && origIdx < docText.length) {
-            if (/\s/.test(docText[origIdx])) {
-                // Skip extra whitespace in original
+
+        while (normIdx < idx && origIdx < searchEl.length) {
+            if (/\s/.test(searchEl[origIdx])) {
                 origIdx++;
                 if (normIdx < normalizedDoc.length && normalizedDoc[normIdx] === " ") {
                     normIdx++;
                 }
-                while (origIdx < docText.length && /\s/.test(docText[origIdx])) {
+                while (origIdx < searchEl.length && /\s/.test(searchEl[origIdx])) {
                     origIdx++;
                 }
             } else {
@@ -58,17 +195,18 @@ function findExcerptInText(
                 normIdx++;
             }
         }
+
         const from = origIdx;
-        // Now consume the matched length
+
         let matchLen = 0;
         let consumedNorm = 0;
-        while (consumedNorm < normalized.length && from + matchLen < docText.length) {
-            if (/\s/.test(docText[from + matchLen])) {
+
+        while (consumedNorm < normalized.length && from + matchLen < searchEl.length) {
+            if (/\s/.test(searchEl[from + matchLen])) {
                 matchLen++;
             } else {
                 matchLen++;
                 consumedNorm++;
-                // Also skip the norm char
                 while (consumedNorm < normalized.length && normalized[consumedNorm] === " ") {
                     consumedNorm++;
                 }
@@ -80,129 +218,62 @@ function findExcerptInText(
     return null;
 }
 
-// Store active highlight DOM elements so we can remove them
-let activeHighlightEls: HTMLElement[] = [];
-
 /**
- * Apply colored highlight overlays to the editor using DOM elements.
- * This is more reliable than CM6 StateField in Obsidian's environment.
+ * Re-export wrapper. Note: scrollToExcerpt uses this directly, so we might want to apply expansion there too?
+ * The user mainly cares about visual highlights. Scroll target is fine if it hits the core text.
  */
+export function findExcerptInText(docText: string, excerpt: string) {
+    let res = findExcerpt(docText, excerpt);
+    if (!res) res = findExcerpt(maskMarkdownSyntax(docText), excerpt);
+    return res;
+}
+
+// --- Helper Functions ---
+
 export function applyHighlights(
     app: App,
     excerpts: { text: string; colorIndex: number }[]
 ): void {
-    clearAllHighlights();
+    const mdView = app.workspace.getActiveViewOfType(MarkdownView);
+    if (!mdView) return;
+
+    const editor = mdView.editor as any;
+    if (!editor.cm) return;
+
+    const cm = editor.cm as EditorView;
+
+    cm.dispatch({
+        effects: setHighlightsEffect.of(excerpts)
+    });
+}
+
+export function clearAllHighlights(app?: App): void {
+    if (!app) return;
 
     const mdView = app.workspace.getActiveViewOfType(MarkdownView);
     if (!mdView) return;
 
-    const editor = mdView.editor;
-    const cmView = (editor as any).cm;
-    if (!cmView) return;
+    const editor = mdView.editor as any;
+    if (!editor.cm) return;
+    const cm = editor.cm as EditorView;
 
-    const docText = cmView.state.doc.toString();
-    const domEl: HTMLElement = cmView.dom;
-
-    for (const { text, colorIndex } of excerpts) {
-        const range = findExcerptInText(docText, text);
-        if (!range) continue;
-
-        const color = HIGHLIGHT_COLORS[colorIndex % HIGHLIGHT_COLORS.length];
-
-        // Get line/col from character offset
-        const fromLine = cmView.state.doc.lineAt(range.from);
-        const toLine = cmView.state.doc.lineAt(range.to);
-
-        // Get the visual coordinates from CM6
-        const fromCoords = cmView.coordsAtPos(range.from);
-        const toCoords = cmView.coordsAtPos(range.to);
-
-        if (!fromCoords || !toCoords) continue;
-
-        const editorRect = domEl.getBoundingClientRect();
-        const scrollerEl = domEl.querySelector(".cm-scroller") as HTMLElement;
-        if (!scrollerEl) continue;
-
-        const scrollerRect = scrollerEl.getBoundingClientRect();
-
-        // Single-line highlight
-        if (fromLine.number === toLine.number) {
-            const el = document.createElement("div");
-            el.className = "deep-notes-editor-highlight";
-            el.style.cssText = `
-				position: absolute;
-				left: ${fromCoords.left - scrollerRect.left + scrollerEl.scrollLeft}px;
-				top: ${fromCoords.top - scrollerRect.top + scrollerEl.scrollTop}px;
-				width: ${toCoords.right - fromCoords.left}px;
-				height: ${fromCoords.bottom - fromCoords.top}px;
-				background-color: ${color.bg};
-				border-bottom: 2px solid ${color.border};
-				pointer-events: none;
-				z-index: 0;
-				border-radius: 2px;
-			`;
-            scrollerEl.appendChild(el);
-            activeHighlightEls.push(el);
-        } else {
-            // Multi-line: highlight first line, middle lines, last line
-            // For simplicity, create one highlight per line
-            for (let lineNum = fromLine.number; lineNum <= toLine.number; lineNum++) {
-                const line = cmView.state.doc.line(lineNum);
-                const lineStart = lineNum === fromLine.number ? range.from : line.from;
-                const lineEnd = lineNum === toLine.number ? range.to : line.to;
-
-                const lFromCoords = cmView.coordsAtPos(lineStart);
-                const lToCoords = cmView.coordsAtPos(lineEnd);
-
-                if (!lFromCoords || !lToCoords) continue;
-
-                const el = document.createElement("div");
-                el.className = "deep-notes-editor-highlight";
-                el.style.cssText = `
-					position: absolute;
-					left: ${lFromCoords.left - scrollerRect.left + scrollerEl.scrollLeft}px;
-					top: ${lFromCoords.top - scrollerRect.top + scrollerEl.scrollTop}px;
-					width: ${lToCoords.right - lFromCoords.left}px;
-					height: ${lFromCoords.bottom - lFromCoords.top}px;
-					background-color: ${color.bg};
-					border-bottom: 2px solid ${color.border};
-					pointer-events: none;
-					z-index: 0;
-					border-radius: 2px;
-				`;
-                scrollerEl.appendChild(el);
-                activeHighlightEls.push(el);
-            }
-        }
-    }
+    cm.dispatch({
+        effects: setHighlightsEffect.of([])
+    });
 }
 
-/**
- * Clear all highlight overlays.
- */
-export function clearAllHighlights(): void {
-    for (const el of activeHighlightEls) {
-        el.remove();
-    }
-    activeHighlightEls = [];
-}
-
-/**
- * Scroll to and briefly select the excerpt in the editor.
- */
 export function scrollToExcerpt(app: App, excerpt: string): void {
     const mdView = app.workspace.getActiveViewOfType(MarkdownView);
     if (!mdView) return;
 
     const editor = mdView.editor;
-    const cmView = (editor as any).cm;
+    const cmView = (editor as any).cm as EditorView;
     if (!cmView) return;
 
     const docText = cmView.state.doc.toString();
     const range = findExcerptInText(docText, excerpt);
     if (!range) return;
 
-    // Convert char offsets to line/ch for Obsidian's editor API
     const fromLine = cmView.state.doc.lineAt(range.from);
     const toLine = cmView.state.doc.lineAt(range.to);
 
