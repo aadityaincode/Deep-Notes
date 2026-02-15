@@ -74,6 +74,19 @@ Choose your backend:
 
 ---
 
+## BRAT (Beta Reviewers Auto-update Tester) Installation
+
+You can install Deep Notes directly from GitHub using the BRAT plugin (no manual build required):
+
+1. Install the **BRAT** plugin from Obsidian's Community Plugins.
+2. In BRAT settings, click **Add Beta Plugin**.
+3. Paste this repo URL: `https://github.com/buhariE/Deep-Notes.git`
+4. Click **Install**. Deep Notes will auto-update with every new release.
+
+After installation, follow the configuration steps below to set up your AI provider (Ollama or API keys).
+
+---
+
 ## Usage
 
 ### 1. Generate Questions
@@ -131,3 +144,13 @@ Deep Notes is designed to work with your privacy preferences.
 -   **Ollama Support**: You can run the entire pipeline (Generation, Embeddings, Evaluation) locally using Ollama.
 -   **API Keys**: If you use cloud providers (Gemini, OpenAI), your keys are stored securely in Obsidian's local configuration.
 -   **Data**: Your notes and the vector index never leave your machine except when explicitly sending a prompt to your chosen AI provider.
+
+---
+
+## Authors
+- Aaditya Dhungana
+- Emmanuel Buhari
+- Noah Hong Anh Khoa
+- Toby Allan
+- Zohaib Talat
+
