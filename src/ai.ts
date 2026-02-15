@@ -5,6 +5,7 @@ import type { SearchResult } from "./vectorStore";
 export interface DeepNotesItem {
 	type: "knowledge-expansion" | "suggestion" | "cross-topic";
 	text: string;
+	sourceExcerpt?: string;
 	sourceNote?: string;
 }
 
@@ -12,6 +13,7 @@ export interface EvaluationFeedback {
 	question: string;
 	rating: "correct" | "partial" | "incorrect";
 	explanation: string;
+	suggestedAnswer?: string;
 }
 
 export interface EvaluationResult {
@@ -143,13 +145,14 @@ function parseResponse(content: string): DeepNotesItem[] {
 		try {
 			const parsed = JSON.parse(jsonMatch[0]);
 			if (Array.isArray(parsed)) {
-				return parsed.map((item: { type?: string; text?: string; sourceNote?: string }) => ({
+				return parsed.map((item: { type?: string; text?: string; sourceExcerpt?: string; sourceNote?: string }) => ({
 					type: item.type === "knowledge-expansion" || item.type === "question"
 						? "knowledge-expansion"
 						: item.type === "cross-topic"
 							? "cross-topic"
 							: "suggestion",
 					text: item.text ?? "",
+					sourceExcerpt: item.sourceExcerpt,
 					sourceNote: item.sourceNote,
 				}));
 			}
@@ -406,6 +409,7 @@ function parseEvaluationResponse(content: string): EvaluationResult {
 							? f.rating
 							: "partial") as "correct" | "partial" | "incorrect",
 						explanation: String(f.explanation ?? ""),
+						suggestedAnswer: typeof f.suggestedAnswer === "string" ? f.suggestedAnswer : undefined,
 					}))
 					: [],
 				summary: String(parsed.summary ?? ""),

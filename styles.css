@@ -7,6 +7,17 @@
 	color: var(--text-normal);
 }
 
+/* Button row for side-by-side buttons */
+.deep-notes-btn-row {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.deep-notes-btn-row .deep-notes-generate-btn {
+	flex: 1;
+}
+
 .deep-notes-generate-btn {
 	width: 100%;
 	padding: 8px 16px;
@@ -39,6 +50,28 @@
 	border-radius: 8px;
 	padding: 12px;
 	margin-bottom: 12px;
+}
+
+.deep-notes-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+.deep-notes-locate-btn {
+	border: 1px solid;
+	border-radius: 4px;
+	padding: 2px 6px;
+	cursor: pointer;
+	font-size: 12px;
+	line-height: 1;
+	background: transparent;
+}
+
+.deep-notes-locate-btn:hover {
+	opacity: 0.8;
+	transform: scale(1.1);
 }
 
 .deep-notes-badge {
@@ -254,4 +287,94 @@
 	font-size: 13px;
 	padding: 8px;
 	margin-top: 4px;
+}
+
+/* History */
+.deep-notes-history-btn {
+	background-color: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.deep-notes-history-btn:hover {
+	background-color: var(--background-modifier-border-hover);
+}
+
+.deep-notes-history-title {
+	margin: 12px 0 8px 0;
+	color: var(--text-muted);
+}
+
+.deep-notes-history-card {
+	cursor: default;
+}
+
+.deep-notes-history-meta {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.deep-notes-history-date {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.deep-notes-history-score {
+	font-size: 12px;
+	font-weight: 700;
+	padding: 2px 10px;
+	border-radius: 10px;
+}
+
+.deep-notes-history-summary {
+	margin: 0 0 8px 0;
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
+.deep-notes-history-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.deep-notes-delete-btn {
+	background-color: rgba(244, 67, 54, 0.15);
+	color: #f44336;
+	border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.deep-notes-delete-btn:hover {
+	background-color: rgba(244, 67, 54, 0.25);
+}
+
+/* Suggested answer */
+.deep-notes-suggested-answer {
+	margin-top: 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.deep-notes-suggested-answer summary {
+	cursor: pointer;
+	padding: 6px 10px;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--text-accent);
+	background-color: var(--background-primary-alt);
+}
+
+.deep-notes-suggested-answer summary:hover {
+	background-color: var(--background-modifier-border);
+}
+
+.deep-notes-suggested-answer-text {
+	padding: 8px 10px;
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--text-normal);
+	background-color: var(--background-primary-alt);
+	border-top: 1px solid var(--background-modifier-border);
 }

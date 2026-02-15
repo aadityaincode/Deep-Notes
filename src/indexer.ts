@@ -1,14 +1,14 @@
 import { Notice, TFile } from "obsidian";
-import type SocraticSagePlugin from "./main";
+import type DeepNotesPlugin from "./main";
 import { VaultVectorStore } from "./vectorStore";
 import { getEmbedding } from "./embeddings";
 
 export class VaultIndexer {
-    private plugin: SocraticSagePlugin;
+    private plugin: DeepNotesPlugin;
     private vectorStore: VaultVectorStore;
     private indexing = false;
 
-    constructor(plugin: SocraticSagePlugin, vectorStore: VaultVectorStore) {
+    constructor(plugin: DeepNotesPlugin, vectorStore: VaultVectorStore) {
         this.plugin = plugin;
         this.vectorStore = vectorStore;
     }

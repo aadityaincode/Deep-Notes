@@ -7,6 +7,7 @@ import {
 	DEFAULT_SYSTEM_PROMPT,
 } from "./constants";
 import type { EmbeddingProvider } from "./embeddings";
+import type { QASession } from "./history";
 import type DeepNotesPlugin from "./main";
 
 export interface DeepNotesSettings {
@@ -18,6 +19,7 @@ export interface DeepNotesSettings {
 	model: string;
 	systemPrompt: string;
 	embeddingProvider: EmbeddingProvider;
+	history: QASession[];
 }
 
 export const DEFAULT_SETTINGS: DeepNotesSettings = {
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	model: "gpt-4o-mini",
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
 	embeddingProvider: "transformers",
+	history: [],
 };
 
 export class DeepNotesSettingTab extends PluginSettingTab {

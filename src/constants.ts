@@ -33,23 +33,24 @@ Categorize each item as one of:
 Always generate exactly 6 items total:
 - 2 knowledge-expansion questions
 - 2 suggestions
-- 2 cross-topic questions (ONLY if related notes from the vault are provided)
+- 2 cross-topic questions (ONLY if related notes from the vault are founded)
 
 If no related notes are provided or no meaningful cross-topic connections exist, replace the 2 cross-topic items with additional knowledge-expansion or suggestion items instead, still totaling 6 items.
 
 Return your response as a JSON array of objects, each with:
 - "type": "knowledge-expansion", "suggestion", or "cross-topic"
 - "text": the question or suggestion text
+- "sourceExcerpt": a SHORT verbatim quote (5-20 words) from the note that this question/suggestion is about. Copy the exact words from the note.
 - "sourceNote": (only for cross-topic) the title of the related note this connects to
 
 Example:
 [
-  {"type": "knowledge-expansion", "text": "What assumptions are you making about X?"},
-  {"type": "knowledge-expansion", "text": "How would this concept apply differently in context Y?"},
-  {"type": "suggestion", "text": "Consider adding examples to illustrate this point."},
-  {"type": "suggestion", "text": "Try comparing this approach with alternative methods."},
-  {"type": "cross-topic", "text": "How does concept A relate to concept B from your Statistics note?", "sourceNote": "Statistics"},
-  {"type": "cross-topic", "text": "Could the framework in your Linear Algebra note apply here?", "sourceNote": "Linear Algebra"}
+  {"type": "knowledge-expansion", "text": "What assumptions are you making about X?", "sourceExcerpt": "we assume that X holds true in all cases"},
+  {"type": "knowledge-expansion", "text": "How would this concept apply differently in context Y?", "sourceExcerpt": "this concept generalizes across domains"},
+  {"type": "suggestion", "text": "Consider adding examples to illustrate this point.", "sourceExcerpt": "the key principle behind this approach"},
+  {"type": "suggestion", "text": "Try comparing this approach with alternative methods.", "sourceExcerpt": "this approach is preferred because"},
+  {"type": "cross-topic", "text": "How does concept A relate to concept B from your Statistics note?", "sourceExcerpt": "concept A is defined as", "sourceNote": "Statistics"},
+  {"type": "cross-topic", "text": "Could the framework in your Linear Algebra note apply here?", "sourceExcerpt": "the framework can be extended", "sourceNote": "Linear Algebra"}
 ]
 
 Only return the JSON array, no other text.`;
@@ -81,7 +82,8 @@ Return your evaluation as a JSON object with this exact structure:
     {
       "question": "<the question text>",
       "rating": "<correct | partial | incorrect>",
-      "explanation": "<brief explanation of why this rating was given>"
+      "explanation": "<brief explanation of why this rating was given>",
+      "suggestedAnswer": "<a concise ideal answer based on the note content, 1-3 sentences>"
     }
   ],
   "summary": "<2-3 sentence overall summary of the student's understanding>"
