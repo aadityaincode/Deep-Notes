@@ -1,45 +1,237 @@
+/*
+ * Deep Notes — Custom Theme
+ * Dark + Warm Amber/Gold
+ * Self-contained: does not depend on Obsidian theme variables
+ */
+
+/* ── Palette ──
+ * bg-deep:     #151210  (near-black warm)
+ * bg-surface:  #1e1a16  (card surface)
+ * bg-raised:   #2a2420  (raised elements)
+ * bg-hover:    #352e28  (hover state)
+ * border:      #3d352d  (subtle border)
+ * border-glow: #c8a24e  (amber accent)
+ * accent:      #d4a843  (warm gold)
+ * accent-soft: #b8923a  (muted gold)
+ * text:        #e8e0d4  (warm white)
+ * text-muted:  #9a8e7f  (warm grey)
+ * text-dim:    #6e6358  (dimmed)
+ * green:       #7ec47e  (success)
+ * yellow:      #d4a843  (warning / partial)
+ * red:         #c75c5c  (error / incorrect)
+ */
+
 .deep-notes-container {
 	padding: 12px;
+	position: relative;
+	background-color: #151210;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+	color: #e8e0d4;
 }
 
 .deep-notes-header h4 {
 	margin: 0 0 12px 0;
-	color: var(--text-normal);
+	color: #e8e0d4;
 }
+
+/* ── Button Layout ── */
+
+.deep-notes-btn-row {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.deep-notes-btn-row .deep-notes-generate-btn {
+	flex: 1;
+}
+
+.deep-notes-btn-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+/* ── Buttons ── */
+
 
 .deep-notes-generate-btn {
 	width: 100%;
 	padding: 8px 16px;
 	cursor: pointer;
-	background-color: var(--background-secondary-alt);
-	color: var(--text-normal);
-	border: 1px solid var(--background-modifier-border);
+	background-color: #1e1a16;
+	color: #e8e0d4;
+	border: 1px solid rgba(200, 162, 78, 0.25);
 	border-radius: 6px;
 	font-size: 14px;
+	box-shadow: 0 0 6px rgba(200, 162, 78, 0.12);
+	transition: box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.25s ease;
 }
 
 .deep-notes-generate-btn:hover {
-	background-color: var(--background-modifier-hover);
+	background-color: #2a2420;
+	border-color: rgba(212, 168, 67, 0.5);
+	box-shadow: 0 0 14px rgba(212, 168, 67, 0.25), 0 0 4px rgba(212, 168, 67, 0.1) inset;
+}
+
+.deep-notes-icon-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+.deep-notes-btn-icon {
+	display: flex;
+	align-items: center;
+}
+
+.deep-notes-btn-icon svg {
+	width: 16px;
+	height: 16px;
+	color: #d4a843;
 }
 
 .deep-notes-regenerate {
-	margin-top: 16px;
+	/* spacing handled by btn-row */
 }
+
+/* ── Loading ── */
 
 .deep-notes-loading {
 	text-align: center;
-	color: var(--text-muted);
+	color: #9a8e7f;
 	padding: 24px 0;
 	font-style: italic;
 }
 
-.deep-notes-card {
-	background-color: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
+/* ── Flowchart Guide ── */
+
+.deep-notes-flowchart {
+	margin-top: 20px;
+	padding: 16px 12px;
+	background: rgba(30, 26, 22, 0.6);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
+	border: 1px solid rgba(200, 162, 78, 0.08);
+	border-radius: 10px;
+}
+
+.deep-notes-flowchart-title {
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.8px;
+	color: #9a8e7f;
+	margin: 0 0 14px 0;
+	text-align: center;
+}
+
+.deep-notes-flow-node {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
 	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.02);
+	border: 1px solid rgba(255, 255, 255, 0.04);
+	transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.deep-notes-flow-node:hover {
+	background: rgba(212, 168, 67, 0.06);
+	box-shadow: 0 0 8px rgba(212, 168, 67, 0.1);
+}
+
+.deep-notes-flow-icon {
+	flex-shrink: 0;
+	width: 28px;
+	height: 28px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: rgba(212, 168, 67, 0.1);
+	border: 1px solid rgba(212, 168, 67, 0.25);
+}
+
+.deep-notes-flow-icon svg {
+	width: 14px;
+	height: 14px;
+	color: #d4a843;
+}
+
+.deep-notes-flow-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.deep-notes-flow-label {
+	font-size: 13px;
+	font-weight: 600;
+	color: #e8e0d4;
+}
+
+.deep-notes-flow-desc {
+	font-size: 11px;
+	color: #9a8e7f;
+	line-height: 1.3;
+}
+
+.deep-notes-flow-connector {
+	width: 2px;
+	height: 12px;
+	margin: 0 auto;
+	background: linear-gradient(to bottom, rgba(212, 168, 67, 0.3), rgba(212, 168, 67, 0.06));
+	border-radius: 1px;
+}
+
+/* ── Cards ── */
+
+.deep-notes-card {
+	background: rgba(30, 26, 22, 0.7);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border: 1px solid rgba(200, 162, 78, 0.08);
+	border-radius: 10px;
 	padding: 12px;
 	margin-bottom: 12px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+
+.deep-notes-card:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.deep-notes-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+.deep-notes-locate-btn {
+	border: 1px solid rgba(200, 162, 78, 0.3);
+	border-radius: 4px;
+	padding: 2px 6px;
+	cursor: pointer;
+	font-size: 12px;
+	line-height: 1;
+	background: transparent;
+	color: #d4a843;
+}
+
+.deep-notes-locate-btn:hover {
+	background: rgba(212, 168, 67, 0.1);
+	transform: scale(1.1);
+}
+
+/* ── Badges ── */
 
 .deep-notes-badge {
 	display: inline-block;
@@ -49,27 +241,34 @@
 	padding: 2px 8px;
 	border-radius: 4px;
 	margin-bottom: 6px;
-	border: 1px solid var(--background-modifier-border);
+	border: 1px solid #3d352d;
+	color: #9a8e7f;
+	background-color: #2a2420;
 }
 
 .deep-notes-badge-knowledge-expansion {
-	background-color: var(--background-modifier-border);
-	color: var(--text-muted);
+	background-color: rgba(212, 168, 67, 0.1);
+	border-color: rgba(212, 168, 67, 0.2);
+	color: #d4a843;
 }
 
 .deep-notes-badge-suggestion {
-	background-color: var(--background-modifier-border);
-	color: var(--text-muted);
+	background-color: rgba(126, 196, 126, 0.1);
+	border-color: rgba(126, 196, 126, 0.2);
+	color: #7ec47e;
 }
 
 .deep-notes-badge-cross-topic {
-	background-color: var(--background-modifier-border);
-	color: var(--text-muted);
+	background-color: rgba(140, 160, 210, 0.1);
+	border-color: rgba(140, 160, 210, 0.2);
+	color: #8ca0d2;
 }
+
+/* ── Text & Inputs ── */
 
 .deep-notes-text {
 	margin: 8px 0;
-	color: var(--text-normal);
+	color: #e8e0d4;
 	line-height: 1.5;
 }
 
@@ -78,35 +277,45 @@
 	box-sizing: border-box;
 	resize: vertical;
 	padding: 8px;
-	border: 1px solid var(--background-modifier-border);
+	border: 1px solid #3d352d;
 	border-radius: 6px;
-	background-color: var(--background-primary);
-	color: var(--text-normal);
+	background-color: #151210;
+	color: #e8e0d4;
 	font-family: inherit;
 	font-size: 13px;
 	margin-bottom: 8px;
+	transition: border-color 0.2s ease;
+}
+
+.deep-notes-response:focus {
+	outline: none;
+	border-color: rgba(212, 168, 67, 0.4);
+	box-shadow: 0 0 6px rgba(212, 168, 67, 0.1);
 }
 
 .deep-notes-add-btn {
 	padding: 6px 12px;
 	cursor: pointer;
-	background-color: var(--background-secondary-alt);
-	color: var(--text-normal);
-	border: 1px solid var(--background-modifier-border);
+	background-color: #2a2420;
+	color: #e8e0d4;
+	border: 1px solid #3d352d;
 	border-radius: 6px;
 	font-size: 13px;
+	transition: background-color 0.2s ease;
 }
 
 .deep-notes-add-btn:hover {
-	background-color: var(--background-modifier-hover);
+	background-color: #352e28;
 }
 
-/* Evaluate button */
+/* ── Evaluate ── */
+
 .deep-notes-evaluate-btn {
 	margin-bottom: 16px;
 }
 
-/* Score section */
+/* ── Score ── */
+
 .deep-notes-score-section {
 	display: flex;
 	justify-content: center;
@@ -118,88 +327,134 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	width: 120px;
-	height: 120px;
+	width: 140px;
+	height: 140px;
 	border-radius: 50%;
 	text-align: center;
 }
 
 .deep-notes-score.score-green {
-	background-color: rgba(0, 200, 83, 0.15);
-	border: 3px solid #00c853;
+	background-color: rgba(126, 196, 126, 0.12);
+	border: 3px solid #7ec47e;
 }
 
 .deep-notes-score.score-yellow {
-	background-color: rgba(255, 193, 7, 0.15);
-	border: 3px solid #ffc107;
+	background-color: rgba(212, 168, 67, 0.12);
+	border: 3px solid #d4a843;
 }
 
 .deep-notes-score.score-red {
-	background-color: rgba(244, 67, 54, 0.15);
-	border: 3px solid #f44336;
+	background-color: rgba(199, 92, 92, 0.12);
+	border: 3px solid #c75c5c;
 }
 
 .deep-notes-score-value {
-	font-size: 28px;
-	font-weight: 700;
-	color: var(--text-normal);
+	font-size: 36px;
+	font-weight: 800;
+	color: #e8e0d4;
+	line-height: 1;
 }
 
 .deep-notes-score-label {
 	font-size: 11px;
-	color: var(--text-muted);
+	color: #9a8e7f;
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
+	margin-top: 4px;
 }
 
-/* Summary */
+/* ── Summary ── */
+
 .deep-notes-summary {
-	background-color: var(--background-secondary);
+	background: rgba(30, 26, 22, 0.6);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border: 1px solid rgba(200, 162, 78, 0.06);
 	border-radius: 8px;
 	padding: 12px;
 	margin-bottom: 16px;
-	color: var(--text-normal);
+	color: #e8e0d4;
 	line-height: 1.5;
 	font-size: 13px;
 }
 
-/* Feedback cards */
+/* ── Feedback Cards ── */
+
 .deep-notes-feedback-card {
-	background-color: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
+	background: rgba(30, 26, 22, 0.65);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border: 1px solid rgba(200, 162, 78, 0.06);
+	border-radius: 10px;
 	padding: 12px;
 	margin-bottom: 10px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.deep-notes-feedback-card:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.deep-notes-feedback-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.deep-notes-individual-score {
+	font-size: 12px;
+	font-weight: 600;
+	opacity: 0.8;
+}
+
+.deep-notes-individual-score.rating-correct {
+	color: #7ec47e;
+}
+
+.deep-notes-individual-score.rating-partial {
+	color: #d4a843;
+}
+
+.deep-notes-individual-score.rating-incorrect {
+	color: #c75c5c;
 }
 
 .deep-notes-rating-badge.rating-correct {
-	background-color: rgba(0, 200, 83, 0.2);
-	color: #00c853;
+	background-color: rgba(126, 196, 126, 0.15);
+	border-color: rgba(126, 196, 126, 0.25);
+	color: #7ec47e;
 }
 
 .deep-notes-rating-badge.rating-partial {
-	background-color: rgba(255, 193, 7, 0.2);
-	color: #ffc107;
+	background-color: rgba(212, 168, 67, 0.15);
+	border-color: rgba(212, 168, 67, 0.25);
+	color: #d4a843;
 }
 
 .deep-notes-rating-badge.rating-incorrect {
-	background-color: rgba(244, 67, 54, 0.2);
-	color: #f44336;
+	background-color: rgba(199, 92, 92, 0.15);
+	border-color: rgba(199, 92, 92, 0.25);
+	color: #c75c5c;
 }
 
 .deep-notes-feedback-question {
 	font-weight: 600;
 	margin-bottom: 4px;
+	color: #e8e0d4;
 }
 
 .deep-notes-feedback-explanation {
-	color: var(--text-muted);
+	color: #9a8e7f;
 	font-size: 13px;
 	line-height: 1.4;
 	margin: 4px 0 0 0;
 }
 
-/* Schedule button */
+/* ── Schedule ── */
+
 .deep-notes-schedule-btn {
 	margin-top: 16px;
 }
@@ -209,22 +464,25 @@
 	font-weight: 400;
 }
 
+/* ── Settings Warning ── */
+
 .deep-notes-setting-warning {
 	margin: 8px 0 16px;
 	padding: 8px 10px;
 	border-radius: 6px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
-	color: var(--text-muted);
+	border: 1px solid rgba(212, 168, 67, 0.2);
+	background: rgba(212, 168, 67, 0.06);
+	color: #d4a843;
 	font-size: 12px;
 	line-height: 1.4;
 }
 
-/* Source note link */
+/* ── Source Note Link ── */
+
 .deep-notes-source-link {
 	display: block;
 	font-size: 12px;
-	color: var(--text-accent);
+	color: #d4a843;
 	margin-bottom: 8px;
 	cursor: pointer;
 	text-decoration: none;
@@ -232,24 +490,27 @@
 
 .deep-notes-source-link:hover {
 	text-decoration: underline;
+	color: #e0bb5c;
 }
 
-/* Index status */
+/* ── Index Status ── */
+
 .deep-notes-index-status {
 	margin-top: 16px;
 	padding: 12px;
-	background-color: var(--background-secondary);
+	background-color: rgba(30, 26, 22, 0.5);
 	border-radius: 8px;
+	border: 1px solid rgba(200, 162, 78, 0.06);
 }
 
 .deep-notes-index-notice {
-	color: var(--text-muted);
+	color: #9a8e7f;
 	font-size: 13px;
 	margin: 0 0 8px 0;
 }
 
 .deep-notes-index-ready {
-	color: var(--text-success, #00c853);
+	color: #7ec47e;
 	font-size: 13px;
 	margin: 0;
 }
@@ -266,28 +527,77 @@
 }
 
 .deep-notes-scan-btn {
-	background-color: var(--background-secondary-alt) !important;
+	/* inherits from generate-btn */
 }
 
-/* Settings warning */
-.deep-notes-setting-warning {
-	color: var(--text-warning, #ffc107);
+/* ── History ── */
+
+.deep-notes-history-btn {
+	background-color: #2a2420;
+	color: #e8e0d4;
+}
+
+.deep-notes-history-btn:hover {
+	background-color: #352e28;
+}
+
+.deep-notes-history-title {
+	margin: 12px 0 8px 0;
+	color: #9a8e7f;
+}
+
+.deep-notes-history-card {
+	cursor: default;
+}
+
+.deep-notes-history-meta {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 6px;
+}
+
+.deep-notes-history-date {
+	font-size: 12px;
+	color: #9a8e7f;
+}
+
+.deep-notes-history-score {
+	font-size: 12px;
+	font-weight: 700;
+	padding: 2px 10px;
+	border-radius: 10px;
+}
+
+.deep-notes-history-summary {
+	margin: 0 0 8px 0;
 	font-size: 13px;
-	padding: 8px;
-	margin-top: 4px;
+	color: #9a8e7f;
 }
 
-/* Image picker */
+.deep-notes-history-actions {
+	display: flex;
+	gap: 8px;
+}
+
+/* ── Image Picker ── */
+
 .deep-notes-image-picker {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 }
 
+.deep-notes-picker-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
 .deep-notes-picker-title {
 	margin: 0 0 4px 0;
 	font-size: 14px;
-	color: var(--text-normal);
+	color: #e8e0d4;
 }
 
 .deep-notes-picker-controls {
@@ -298,7 +608,7 @@
 .deep-notes-picker-action {
 	background: none;
 	border: none;
-	color: var(--text-accent);
+	color: #d4a843;
 	cursor: pointer;
 	font-size: 12px;
 	padding: 2px 4px;
@@ -306,7 +616,7 @@
 }
 
 .deep-notes-picker-action:hover {
-	color: var(--text-accent-hover);
+	color: #e0bb5c;
 }
 
 .deep-notes-picker-list {
@@ -315,9 +625,10 @@
 	gap: 4px;
 	max-height: 200px;
 	overflow-y: auto;
-	border: 1px solid var(--background-modifier-border);
+	border: 1px solid #3d352d;
 	border-radius: 6px;
 	padding: 6px;
+	background: #151210;
 }
 
 .deep-notes-picker-row {
@@ -329,7 +640,7 @@
 }
 
 .deep-notes-picker-row:hover {
-	background: var(--background-modifier-hover);
+	background: #2a2420;
 }
 
 .deep-notes-picker-label {
@@ -338,11 +649,12 @@
 	gap: 8px;
 	cursor: pointer;
 	font-size: 13px;
-	color: var(--text-normal);
+	color: #e8e0d4;
 }
 
 .deep-notes-picker-checkbox {
 	flex-shrink: 0;
+	accent-color: #d4a843;
 }
 
 .deep-notes-picker-name {
@@ -356,17 +668,16 @@
 	font-size: 10px;
 	padding: 1px 5px;
 	border-radius: 4px;
-	background: var(--background-modifier-border);
-	color: var(--text-muted);
+	background: #2a2420;
+	color: #9a8e7f;
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
 }
 
 .deep-notes-picker-badge-img {
-	background: var(--background-modifier-border);
-	color: var(--text-muted);
+	background: #2a2420;
+	color: #9a8e7f;
 }
-
 
 .deep-notes-picker-actions {
 	display: flex;
@@ -381,4 +692,70 @@
 	padding: 8px 12px;
 	font-size: 13px;
 	box-sizing: border-box;
+}
+
+/* ── Delete Button ── */
+
+.deep-notes-delete-btn {
+	background-color: rgba(199, 92, 92, 0.12);
+	color: #c75c5c;
+	border: 1px solid rgba(199, 92, 92, 0.25);
+}
+
+.deep-notes-delete-btn:hover {
+	background-color: rgba(199, 92, 92, 0.22);
+}
+
+/* ── Suggested Answer ── */
+
+.deep-notes-suggested-answer {
+	margin-top: 8px;
+	border: 1px solid #3d352d;
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.deep-notes-suggested-answer summary {
+	cursor: pointer;
+	padding: 6px 10px;
+	font-size: 13px;
+	font-weight: 500;
+	color: #d4a843;
+	background-color: #1e1a16;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.deep-notes-suggested-answer summary:hover {
+	background-color: #2a2420;
+}
+
+.deep-notes-suggested-answer-text {
+	padding: 8px 10px;
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: #e8e0d4;
+	background-color: #1e1a16;
+	border-top: 1px solid #3d352d;
+}
+
+/* ── Scrollbar ── */
+
+.deep-notes-container::-webkit-scrollbar {
+	width: 6px;
+}
+
+.deep-notes-container::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.deep-notes-container::-webkit-scrollbar-thumb {
+	background: rgba(200, 162, 78, 0.2);
+	border-radius: 3px;
+}
+
+.deep-notes-container::-webkit-scrollbar-thumb:hover {
+	background: rgba(200, 162, 78, 0.35);
 }

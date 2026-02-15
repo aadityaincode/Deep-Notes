@@ -6,6 +6,7 @@ import type { ImagePayload } from "./ocr";
 export interface DeepNotesItem {
 	type: "knowledge-expansion" | "suggestion" | "cross-topic";
 	text: string;
+	sourceExcerpt?: string;
 	sourceNote?: string;
 }
 
@@ -13,6 +14,7 @@ export interface EvaluationFeedback {
 	question: string;
 	rating: "correct" | "partial" | "incorrect";
 	explanation: string;
+	suggestedAnswer?: string;
 }
 
 export interface EvaluationResult {
@@ -145,28 +147,211 @@ async function findOllamaFallbackModel(model: string, normalizedBase: string): P
 }
 
 function parseResponse(content: string): DeepNotesItem[] {
-	// Try to extract JSON from the response (handles markdown code fences)
-	const jsonMatch = content.match(/\[[\s\S]*\]/);
-	if (jsonMatch) {
+	const normalized = stripCodeFences(content).trim();
+	const candidates = extractJsonCandidates(content, normalized);
+
+	for (const candidate of candidates) {
 		try {
-			const parsed = JSON.parse(jsonMatch[0]);
-			if (Array.isArray(parsed)) {
-				return parsed.map((item: { type?: string; text?: string; sourceNote?: string }) => ({
-					type: item.type === "knowledge-expansion" || item.type === "question"
-						? "knowledge-expansion"
-						: item.type === "cross-topic"
-							? "cross-topic"
-							: "suggestion",
-					text: item.text ?? "",
-					sourceNote: item.sourceNote,
-				}));
+			const cleaned = cleanJsonCandidate(candidate);
+			const parsed = JSON.parse(cleaned);
+			const items = parseDeepNotesItems(parsed);
+			if (items.length > 0) {
+				return items;
 			}
-		} catch {
-			// fall through
+		} catch (e) {
+			console.warn("Deep Notes: JSON parse failed", e);
 		}
 	}
 
-	return [{ type: "suggestion", text: content.trim() }];
+	const textFieldItems = extractTextFieldsFromJsonLikeText(normalized);
+	if (textFieldItems.length > 0) {
+		return textFieldItems;
+	}
+
+	const listItems = parseListItemsFromText(normalized);
+	if (listItems.length > 0) {
+		return listItems.map((text) => ({ type: "knowledge-expansion", text }));
+	}
+
+	if (!normalized) {
+		return [];
+	}
+
+	return [{ type: "suggestion", text: toHumanReadableText(normalized) }];
+}
+
+function stripCodeFences(content: string): string {
+	return content.replace(/```(?:json)?/gi, "").replace(/```/g, "");
+}
+
+function cleanJsonCandidate(candidate: string): string {
+	return candidate
+		.replace(/,\s*([\]}])/g, "$1")
+		.replace(/[\x00-\x1F\x7F]/g, (c) => (["\r", "\n", "\t"].includes(c) ? c : ""));
+}
+
+function extractJsonCandidates(raw: string, normalized: string): string[] {
+	const candidates: string[] = [];
+
+	const blockRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+	let blockMatch: RegExpExecArray | null = null;
+	while ((blockMatch = blockRegex.exec(raw)) !== null) {
+		const block = blockMatch[1]?.trim();
+		if (block && (block.startsWith("[") || block.startsWith("{"))) {
+			candidates.push(block);
+		}
+	}
+
+	if (normalized.startsWith("[") || normalized.startsWith("{")) {
+		candidates.push(normalized);
+	}
+
+	const arrayMatch = normalized.match(/\[[\s\S]*\]/);
+	if (arrayMatch) {
+		candidates.push(arrayMatch[0]);
+	}
+
+	const objectMatch = normalized.match(/\{[\s\S]*\}/);
+	if (objectMatch) {
+		candidates.push(objectMatch[0]);
+	}
+
+	return Array.from(new Set(candidates.map((c) => c.trim()).filter(Boolean)));
+}
+
+function parseDeepNotesItems(parsed: unknown): DeepNotesItem[] {
+	if (Array.isArray(parsed)) {
+		return parsed
+			.map((entry) => normalizeDeepNotesItem(entry))
+			.filter((item): item is DeepNotesItem => item !== null);
+	}
+
+	if (parsed && typeof parsed === "object") {
+		const obj = parsed as Record<string, unknown>;
+		for (const key of ["items", "questions", "suggestions", "results", "data"]) {
+			if (Array.isArray(obj[key])) {
+				return (obj[key] as unknown[])
+					.map((entry) => normalizeDeepNotesItem(entry))
+					.filter((item): item is DeepNotesItem => item !== null);
+			}
+		}
+
+		const single = normalizeDeepNotesItem(obj);
+		if (single) {
+			return [single];
+		}
+	}
+
+	return [];
+}
+
+function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
+	if (typeof entry === "string") {
+		const text = toHumanReadableText(entry);
+		return text ? { type: "knowledge-expansion", text } : null;
+	}
+
+	if (!entry || typeof entry !== "object") {
+		return null;
+	}
+
+	const item = entry as Record<string, unknown>;
+	const rawText = item.text ?? item.question ?? item.prompt ?? item.suggestion ?? item.content;
+	if (typeof rawText !== "string") {
+		return null;
+	}
+
+	const text = toHumanReadableText(rawText);
+	if (!text) {
+		return null;
+	}
+
+	const rawType = String(item.type ?? item.kind ?? item.category ?? "").toLowerCase();
+	const type: DeepNotesItem["type"] =
+		rawType === "knowledge-expansion" || rawType === "question"
+			? "knowledge-expansion"
+			: rawType === "cross-topic"
+				? "cross-topic"
+				: "suggestion";
+
+	const sourceExcerpt =
+		typeof item.sourceExcerpt === "string"
+			? item.sourceExcerpt
+			: typeof item.excerpt === "string"
+				? item.excerpt
+				: typeof item.quote === "string"
+					? item.quote
+					: undefined;
+
+	const sourceNote =
+		typeof item.sourceNote === "string"
+			? item.sourceNote
+			: typeof item.note === "string"
+				? item.note
+				: typeof item.relatedNote === "string"
+					? item.relatedNote
+					: undefined;
+
+	return { type, text, sourceExcerpt, sourceNote };
+}
+
+function extractTextFieldsFromJsonLikeText(content: string): DeepNotesItem[] {
+	const matches = Array.from(content.matchAll(/"text"\s*:\s*"([\s\S]*?)"/g));
+	if (matches.length === 0) {
+		return [];
+	}
+
+	const items = matches
+		.map((m) => decodeJsonString(m[1]))
+		.map((text) => toHumanReadableText(text))
+		.filter((text) => text.length > 0)
+		.map((text) => ({ type: "knowledge-expansion", text } as DeepNotesItem));
+
+	return items;
+}
+
+function decodeJsonString(value: string): string {
+	try {
+		return JSON.parse(`"${value.replace(/"/g, '\\"')}"`);
+	} catch {
+		return value;
+	}
+}
+
+function parseListItemsFromText(content: string): string[] {
+	const lines = content
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0);
+
+	const parsed = lines
+		.map((line) => {
+			const bullet = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/);
+			if (bullet) {
+				return bullet[1];
+			}
+
+			const label = line.match(/^(?:q(?:uestion)?\s*\d*[:.-]|suggestion\s*\d*[:.-])\s*(.+)$/i);
+			return label ? label[1] : "";
+		})
+		.map((line) => toHumanReadableText(line))
+		.filter((line) => line.length > 0);
+
+	return parsed.length >= 2 ? parsed : [];
+}
+
+function toHumanReadableText(value: string): string {
+	return value
+		.replace(/\\n/g, " ")
+		.replace(/\\t/g, " ")
+		.replace(/\\r/g, " ")
+		.replace(/\\"/g, '"')
+		.replace(/^[\s"'`]+|[\s"'`]+$/g, "")
+		.replace(/^(?:[-*•]|\d+[.)])\s+/, "")
+		.replace(/\*\*/g, "")
+		.replace(/`/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 async function callOpenAI(
@@ -384,7 +569,7 @@ function enforceEvaluationRubric(
 		const forcedFeedback: EvaluationFeedback = {
 			question: qa.question,
 			rating: "incorrect",
-			explanation: "Response is non-substantive or off-topic, so it does not demonstrate understanding.",
+			explanation: "No meaningful response provided.",
 		};
 
 		if (existingIndex >= 0) {
@@ -398,13 +583,17 @@ function enforceEvaluationRubric(
 		return { ...result, feedback };
 	}
 
+	// Only cap the score proportionally — don't be overly punitive
 	const total = questionsAndResponses.length;
 	const validCount = Math.max(0, total - nonSubstantiveCount);
-	const cap = validCount === 0 ? 5 : Math.max(10, Math.floor((validCount / total) * 60));
+	const proportionValid = validCount / total;
+	// Allow the AI-determined score to stand, but scale it down proportionally
+	// to the fraction of answered questions
+	const cap = validCount === 0 ? 5 : Math.max(20, Math.floor(proportionValid * result.score));
 	const score = Math.min(result.score, cap);
 	const summary =
 		validCount === 0
-			? "Responses are non-substantive or off-topic, so understanding is scored very low."
+			? "No substantive responses were provided."
 			: result.summary;
 
 	return {
@@ -441,8 +630,9 @@ function isNonSubstantiveResponse(response: string): boolean {
 		return true;
 	}
 
+	// Only flag truly empty/trivial responses — short but meaningful ones are fine
 	const words = normalized.match(/[a-z0-9]+/g) ?? [];
-	if (words.length <= 2 || trimmed.length < 8) {
+	if (words.length === 0 || trimmed.length < 3) {
 		return true;
 	}
 
@@ -463,6 +653,7 @@ function parseEvaluationResponse(content: string): EvaluationResult {
 							? f.rating
 							: "partial") as "correct" | "partial" | "incorrect",
 						explanation: String(f.explanation ?? ""),
+						suggestedAnswer: typeof f.suggestedAnswer === "string" ? f.suggestedAnswer : undefined,
 					}))
 					: [],
 				summary: String(parsed.summary ?? ""),
@@ -471,5 +662,6 @@ function parseEvaluationResponse(content: string): EvaluationResult {
 			// fall through
 		}
 	}
-	return { score: 0, feedback: [], summary: "Failed to parse evaluation response." };
+	// If parsing fails, return a neutral score rather than 0
+	return { score: 50, feedback: [], summary: "Could not parse evaluation — please try again." };
 }

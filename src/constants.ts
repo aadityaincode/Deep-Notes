@@ -37,23 +37,24 @@ Categorize each item as one of:
 Always generate exactly 6 items total:
 - 2 knowledge-expansion questions
 - 2 suggestions
-- 2 cross-topic questions (ONLY if related notes from the vault are provided)
+- 2 cross-topic questions (ONLY if related notes from the vault are founded)
 
 If no related notes are provided or no meaningful cross-topic connections exist, replace the 2 cross-topic items with additional knowledge-expansion or suggestion items instead, still totaling 6 items.
 
 Return your response as a JSON array of objects, each with:
 - "type": "knowledge-expansion", "suggestion", or "cross-topic"
 - "text": the question or suggestion text
+- "sourceExcerpt": a SHORT verbatim quote (5-20 words) from the note that this question/suggestion is about. Copy the exact words from the note.
 - "sourceNote": (only for cross-topic) the title of the related note this connects to
 
 Example:
 [
-  {"type": "knowledge-expansion", "text": "What assumptions are you making about X?"},
-  {"type": "knowledge-expansion", "text": "How would this concept apply differently in context Y?"},
-  {"type": "suggestion", "text": "Consider adding examples to illustrate this point."},
-  {"type": "suggestion", "text": "Try comparing this approach with alternative methods."},
-  {"type": "cross-topic", "text": "How does concept A relate to concept B from your Statistics note?", "sourceNote": "Statistics"},
-  {"type": "cross-topic", "text": "Could the framework in your Linear Algebra note apply here?", "sourceNote": "Linear Algebra"}
+  {"type": "knowledge-expansion", "text": "What assumptions are you making about X?", "sourceExcerpt": "we assume that X holds true in all cases"},
+  {"type": "knowledge-expansion", "text": "How would this concept apply differently in context Y?", "sourceExcerpt": "this concept generalizes across domains"},
+  {"type": "suggestion", "text": "Consider adding examples to illustrate this point.", "sourceExcerpt": "the key principle behind this approach"},
+  {"type": "suggestion", "text": "Try comparing this approach with alternative methods.", "sourceExcerpt": "this approach is preferred because"},
+  {"type": "cross-topic", "text": "How does concept A relate to concept B from your Statistics note?", "sourceExcerpt": "concept A is defined as", "sourceNote": "Statistics"},
+  {"type": "cross-topic", "text": "Could the framework in your Linear Algebra note apply here?", "sourceExcerpt": "the framework can be extended", "sourceNote": "Linear Algebra"}
 ]
 
 Only return the JSON array, no other text.`;
@@ -84,25 +85,27 @@ Return a JSON array of objects with:
 
 Only return the JSON array, no other text.`;
 
-export const EVALUATION_SYSTEM_PROMPT = `You are an expert evaluator assessing a student's understanding of study material based on their responses to generated questions.
+export const EVALUATION_SYSTEM_PROMPT = `You are a supportive evaluator assessing how well a student understands study material based on their responses to questions.
 
 You will receive:
 1. The original note content (the study material)
 2. A list of questions that were asked
 3. The student's responses to each question
 
-Evaluate each response for correctness and depth of understanding. Then provide an overall understanding score.
+Evaluate each response focusing on KNOWLEDGE EXPANSION — how well the student demonstrates they have engaged with and internalized the material.
 
-Use this strict rubric:
-- Relevance (0-40): Does the response directly address the question and note content?
-- Accuracy (0-40): Are claims correct according to the note content?
-- Specificity (0-20): Does the response include concrete reasoning/examples instead of vague filler?
+Rubric:
+- Understanding (0-50): Does the response show the student grasps the core concept?
+- Knowledge Depth (0-30): Does the response show the student can connect ideas, apply concepts, or explain reasoning?
+- Engagement (0-20): Does the response show genuine effort to think about the material?
 
-Hard rules:
-- If a response is profanity-only, abusive, filler (e.g., "idk", "whatever"), nonsense, empty, or clearly off-topic, it MUST be rated "incorrect".
-- Non-substantive responses receive 0 for that question.
-- If all responses are non-substantive, the overall score must be in the 0-5 range.
-- Do not reward tone/politeness; only reward demonstrated understanding.
+Key principles:
+- Reward any demonstration of understanding, even if phrasing is informal or incomplete.
+- Short but correct answers should still receive good scores.
+- Focus on whether the student LEARNED something, not on perfect recall.
+- If a response captures the essence of the answer, rate it as "correct" even if it lacks detail.
+- Only rate "incorrect" if the response is genuinely wrong, empty, or complete nonsense.
+- A partially correct answer showing real engagement deserves "partial" at minimum.
 
 Return your evaluation as a JSON object with this exact structure:
 {
@@ -111,15 +114,16 @@ Return your evaluation as a JSON object with this exact structure:
     {
       "question": "<the question text>",
       "rating": "<correct | partial | incorrect>",
-      "explanation": "<brief explanation of why this rating was given>"
+      "explanation": "<brief explanation of the rating — be encouraging>",
+      "suggestedAnswer": "<a concise ideal answer based on the note content, 1-3 sentences>"
     }
   ],
-  "summary": "<2-3 sentence overall summary of the student's understanding>"
+  "summary": "<2-3 sentence overall summary focused on what the student understood well and what to explore further>"
 }
 
 Rating guidelines:
-- "correct": The response demonstrates strong understanding of the concept
-- "partial": The response shows some understanding but is incomplete or slightly inaccurate
-- "incorrect": The response shows a misunderstanding or is largely wrong
+- "correct": The response shows the student understands the concept (even if brief)
+- "partial": The response shows some understanding but misses key aspects
+- "incorrect": The response is wrong, empty, or shows no engagement with the material
 
 Only return the JSON object, no other text.`;

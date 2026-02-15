@@ -1,9 +1,24 @@
-import { ItemView, Notice, WorkspaceLeaf, TFile, debounce } from "obsidian";
+import { ItemView, Notice, WorkspaceLeaf, TFile, debounce, setIcon } from "obsidian";
 import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult } from "./ai";
 import { getEmbedding } from "./embeddings";
 import { listEmbeddedImages, loadImagesByPaths, resolveExcalidrawEmbeddedImages, extractExcalidrawAnnotations, ImageInfo, ImagePayload } from "./ocr";
+import { saveSession, getSessionsForNote, deleteSession, QASession } from "./history";
+import { HIGHLIGHT_COLORS, applyHighlights, clearAllHighlights, scrollToExcerpt } from "./highlights";
 import type DeepNotesPlugin from "./main";
+
+type ViewMode = "questions" | "evaluation" | "history";
+
+interface CachedSession {
+	items: DeepNotesItem[];
+	responses: string[];
+	evaluationResult: EvaluationResult | null;
+	viewMode: ViewMode;
+}
+
+// Global cache to persist state across view reloads/navigation
+// Key: file path
+const sessionCache = new Map<string, CachedSession>();
 
 export class DeepNotesView extends ItemView {
 	plugin: DeepNotesPlugin;
@@ -13,6 +28,9 @@ export class DeepNotesView extends ItemView {
 	private evaluating = false;
 	private evaluationResult: EvaluationResult | null = null;
 	private textareaRefs: HTMLTextAreaElement[] = [];
+	private viewMode: ViewMode = "questions";
+	private lastNotePath: string | null = null;
+	private currentResponses: string[] = [];
 	// Image picker state
 	private showImagePicker = false;
 	private availableImages: ImageInfo[] = [];
@@ -39,22 +57,106 @@ export class DeepNotesView extends ItemView {
 		this.registerEvent(
 			this.app.workspace.on(
 				"active-leaf-change",
-				debounce(() => {
-					this.items = [];
-					this.evaluationResult = null;
-					this.textareaRefs = [];
-					this.showImagePicker = false;
-					this.availableImages = [];
-					this.selectedImagePaths.clear();
-					this.render();
-				}, 300)
+				debounce(async () => {
+					await this.handleActiveLeafChange();
+				}, 200)
 			)
 		);
-		this.render();
+		// Initial check
+		await this.handleActiveLeafChange();
 	}
 
 	async onClose(): Promise<void> {
+		this.saveCurrentStateToCache();
+		clearAllHighlights(this.app);
 		this.contentEl.empty();
+	}
+
+	private saveCurrentStateToCache(): void {
+		if (!this.lastNotePath) return;
+
+		// Only save if there's something to save
+		if (this.items.length > 0 || this.evaluationResult) {
+			sessionCache.set(this.lastNotePath, {
+				items: this.items,
+				responses: this.currentResponses,
+				evaluationResult: this.evaluationResult,
+				viewMode: this.viewMode,
+			});
+		}
+	}
+
+	private async handleActiveLeafChange(): Promise<void> {
+		const file = this.app.workspace.getActiveFile();
+		const newPath = file ? file.path : null;
+
+		// Ignore if same file — don't re-render when clicking between
+		// the editor and sidebar, which also fires active-leaf-change
+		if (newPath === this.lastNotePath) return;
+
+		// If changing files, save state of the OLD file
+		if (this.lastNotePath) {
+			this.saveCurrentStateToCache();
+			clearAllHighlights(this.app);
+		}
+
+		this.lastNotePath = newPath;
+
+		if (!file) {
+			this.items = [];
+			this.evaluationResult = null;
+			this.viewMode = "questions";
+			this.render();
+			return;
+		}
+
+		// Restore from cache if exists
+		const cached = sessionCache.get(file.path);
+		if (cached) {
+			this.items = cached.items;
+			this.evaluationResult = cached.evaluationResult;
+			this.viewMode = cached.viewMode;
+			this.currentResponses = cached.responses;
+			// We'll restore responses after render
+			this.render();
+			// Restore responses
+			if (this.viewMode === "questions") {
+				// Wait for DOM
+				requestAnimationFrame(() => {
+					for (let i = 0; i < this.currentResponses.length && i < this.textareaRefs.length; i++) {
+						this.textareaRefs[i].value = this.currentResponses[i];
+					}
+				});
+			}
+			// Re-apply highlights if we have items
+			this.applyQuestionHighlights();
+		} else {
+			// New note with no history
+			this.items = [];
+			this.evaluationResult = null;
+			this.currentResponses = [];
+			this.viewMode = "questions";
+			this.render();
+		}
+	}
+
+	private applyQuestionHighlights(): void {
+		if (this.items.length === 0) {
+			clearAllHighlights(this.app);
+			return;
+		}
+
+		const excerpts = this.items
+			.map((item, idx) => ({
+				text: item.sourceExcerpt ?? "",
+				colorIndex: idx,
+			}))
+			.filter((e) => e.text.length > 0);
+
+		if (excerpts.length > 0) {
+			// Small delay to let the editor settle after render
+			setTimeout(() => applyHighlights(this.app, excerpts), 100);
+		}
 	}
 
 	private getActiveKey(): string {
@@ -81,10 +183,14 @@ export class DeepNotesView extends ItemView {
 		this.loadingMessage = "Generating questions from note...";
 		this.evaluationResult = null;
 		this.textareaRefs = [];
+		this.viewMode = "questions";
 		this.render();
 
 		try {
 			const content = await this.app.vault.read(file);
+
+			// Index just this note (fast), full vault indexing is done via command or on first use
+			await this.plugin.indexer.indexSingleNote(file);
 			let enrichedContent = content;
 
 			// Search for related notes via vector store
@@ -98,8 +204,13 @@ export class DeepNotesView extends ItemView {
 						5,
 						file.path
 					);
-					if (results.length > 0) {
-						relatedContext = results;
+					// Only include results for notes that still exist in the vault
+					const existingFiles = new Set(
+						this.app.vault.getMarkdownFiles().map((f) => f.path)
+					);
+					const validResults = results.filter((r) => existingFiles.has(r.filePath));
+					if (validResults.length > 0) {
+						relatedContext = validResults;
 					}
 				}
 			} catch (e) {
@@ -115,12 +226,26 @@ export class DeepNotesView extends ItemView {
 				ollamaBaseUrl,
 				relatedContext
 			);
+
+			// Filter out cross-topic questions if no related notes were provided
+			// (the LLM sometimes generates them anyway)
+			if (!relatedContext) {
+				this.items = this.items.filter((item) => item.type !== "cross-topic");
+			}
+
+			// Initialize responses
+			this.currentResponses = new Array(this.items.length).fill("");
+
+			// Save to cache immediately
+			this.saveCurrentStateToCache();
+
 		} catch (e) {
 			new Notice(`Deep Notes error: ${e instanceof Error ? e.message : e}`);
 			this.items = [];
 		} finally {
 			this.loading = false;
 			this.render();
+			this.applyQuestionHighlights();
 		}
 	}
 
@@ -293,7 +418,7 @@ ${noteContent}`;
 
 		const questionsAndResponses = this.items.map((item, i) => ({
 			question: item.text,
-			response: this.textareaRefs[i]?.value.trim() ?? "",
+			response: this.currentResponses[i] || "",
 		}));
 
 		const hasResponse = questionsAndResponses.some((qr) => qr.response.length > 0);
@@ -319,6 +444,24 @@ ${noteContent}`;
 				model,
 				ollamaBaseUrl
 			);
+
+			// Save session to history
+			const session: QASession = {
+				id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+				notePath: file.path,
+				noteTitle: file.basename,
+				timestamp: Date.now(),
+				items: this.items,
+				responses: this.currentResponses,
+				evaluation: this.evaluationResult,
+			};
+			await saveSession(this.plugin, session);
+
+			this.viewMode = "evaluation";
+
+			// Save to cache
+			this.saveCurrentStateToCache();
+
 		} catch (e) {
 			new Notice(`Evaluation error: ${e instanceof Error ? e.message : e}`);
 			this.evaluationResult = null;
@@ -326,6 +469,27 @@ ${noteContent}`;
 			this.evaluating = false;
 			this.render();
 		}
+	}
+
+	private loadSession(session: QASession): void {
+		this.items = session.items;
+		this.evaluationResult = session.evaluation ?? null;
+		this.viewMode = session.evaluation ? "evaluation" : "questions";
+		this.currentResponses = session.responses;
+		this.textareaRefs = [];
+		this.render();
+		this.applyQuestionHighlights(); // Restore highlights
+
+		// Restore responses into textareas after render
+		if (!session.evaluation) {
+			requestAnimationFrame(() => {
+				for (let i = 0; i < this.currentResponses.length && i < this.textareaRefs.length; i++) {
+					this.textareaRefs[i].value = this.currentResponses[i];
+				}
+			});
+		}
+
+		this.saveCurrentStateToCache();
 	}
 
 	private getReviewDate(score: number): Date {
@@ -426,9 +590,15 @@ ${noteContent}`;
 	}
 
 	private render(): void {
-		const container = this.contentEl;
-		container.empty();
-		container.addClass("deep-notes-container");
+
+		   // Always render into a dedicated root div inside contentEl
+		   let root = this.contentEl.querySelector<HTMLDivElement>(".deep-notes-container-root");
+		   if (!root) {
+			   root = this.contentEl.createDiv({ cls: "deep-notes-container-root" });
+		   }
+		   root.empty();
+		   root.addClass("deep-notes-container");
+		   const container = root;
 
 		const file = this.app.workspace.getActiveFile();
 		const noteName = file ? file.basename : "No active note";
@@ -453,6 +623,18 @@ ${noteContent}`;
 			return;
 		}
 
+		// History view
+		if (this.viewMode === "history") {
+			this.renderHistory(container);
+			return;
+		}
+
+		// Show evaluation results
+		if (this.viewMode === "evaluation" && this.evaluationResult) {
+			this.renderEvaluationResult(container);
+			return;
+		}
+
 		if (this.items.length === 0) {
 			// Image picker view
 			if (this.showImagePicker) {
@@ -460,43 +642,80 @@ ${noteContent}`;
 				return;
 			}
 
-			// Two main action buttons
-			const btnGroup = container.createDiv({ cls: "deep-notes-btn-group" });
+			const btnStack = container.createDiv({ cls: "deep-notes-btn-stack" });
 
-			const genBtn = btnGroup.createEl("button", {
-				text: "Generate Questions",
-				cls: "deep-notes-generate-btn",
+			const genBtn = btnStack.createEl("button", {
+				cls: "deep-notes-generate-btn deep-notes-icon-btn",
 			});
+			const genIcon = genBtn.createSpan({ cls: "deep-notes-btn-icon" });
+			setIcon(genIcon, "lightbulb");
+			genBtn.createSpan({ text: "Generate Questions" });
 			genBtn.addEventListener("click", () => this.triggerGeneration());
 
-			const scanBtn = btnGroup.createEl("button", {
-				text: "Scan Images",
-				cls: "deep-notes-generate-btn deep-notes-scan-btn",
+			const scanBtn = btnStack.createEl("button", {
+				cls: "deep-notes-generate-btn deep-notes-scan-btn deep-notes-icon-btn",
 			});
+			const scanIcon = scanBtn.createSpan({ cls: "deep-notes-btn-icon" });
+			setIcon(scanIcon, "scan-eye");
+			scanBtn.createSpan({ text: "Scan Images" });
 			scanBtn.addEventListener("click", () => this.openImagePicker());
+
+			const historyBtn = btnStack.createEl("button", {
+				cls: "deep-notes-generate-btn deep-notes-history-btn deep-notes-icon-btn",
+			});
+			const histIcon = historyBtn.createSpan({ cls: "deep-notes-btn-icon" });
+			setIcon(histIcon, "history");
+			historyBtn.createSpan({ text: "History" });
+			historyBtn.addEventListener("click", () => {
+				this.viewMode = "history";
+				this.render();
+			});
+
+			// Flowchart guide
+			this.renderFlowchartGuide(container);
 
 			// Show index status
 			this.renderIndexStatus(container);
 			return;
 		}
 
-		// Show evaluation results
-		if (this.evaluationResult) {
-			this.renderEvaluationResult(container);
-			return;
-		}
+		// Clear Cache Button (Top Right)
+		const clearBtn = container.createEl("button", {
+			text: "Clear Session",
+			cls: "deep-notes-generate-btn deep-notes-history-btn",
+			attr: { style: "margin-bottom: 8px; font-size: 12px; padding: 4px;" }
+		});
+		clearBtn.addEventListener("click", () => {
+			if (this.lastNotePath) {
+				sessionCache.delete(this.lastNotePath);
+			}
+			this.items = [];
+			this.evaluationResult = null;
+			this.currentResponses = [];
+			this.viewMode = "questions";
+			clearAllHighlights(this.app);
+			this.render();
+			new Notice("Session cleared.");
+		});
 
 		// Evaluate button at top
 		const evalBtn = container.createEl("button", {
-			text: "Evaluate",
+			text: "Evaluate & Save Session",
 			cls: "deep-notes-generate-btn deep-notes-evaluate-btn",
 		});
 		evalBtn.addEventListener("click", () => this.triggerEvaluation());
 
 		// Render question/suggestion cards
 		this.textareaRefs = [];
-		for (const item of this.items) {
+		for (let idx = 0; idx < this.items.length; idx++) {
+			const item = this.items[idx];
+			const color = HIGHLIGHT_COLORS[idx % HIGHLIGHT_COLORS.length];
 			const card = container.createDiv({ cls: "deep-notes-card" });
+
+			// Color indicator bar
+			card.style.borderLeft = `4px solid ${color.border}`;
+
+			const headerRow = card.createDiv({ cls: "deep-notes-card-header" });
 
 			const badgeText =
 				item.type === "knowledge-expansion"
@@ -504,10 +723,24 @@ ${noteContent}`;
 					: item.type === "cross-topic"
 						? "Cross-Topic"
 						: "Suggestion";
-			card.createEl("span", {
+			headerRow.createEl("span", {
 				text: badgeText,
 				cls: `deep-notes-badge deep-notes-badge-${item.type}`,
 			});
+
+			// Scroll-to-highlight button
+			if (item.sourceExcerpt) {
+				const locateBtn = headerRow.createEl("button", {
+					cls: "deep-notes-locate-btn",
+					attr: { "aria-label": "Scroll to highlighted section" },
+				});
+				locateBtn.style.backgroundColor = color.bg;
+				locateBtn.style.borderColor = color.border;
+				locateBtn.innerHTML = "📍";
+				locateBtn.addEventListener("click", () => {
+					scrollToExcerpt(this.app, item.sourceExcerpt!);
+				});
+			}
 
 			card.createEl("p", { text: item.text, cls: "deep-notes-text" });
 
@@ -538,6 +771,17 @@ ${noteContent}`;
 				attr: { rows: "3" },
 			}) as HTMLTextAreaElement;
 			this.textareaRefs.push(textarea);
+
+			// Init value if exists
+			if (this.currentResponses[idx]) {
+				textarea.value = this.currentResponses[idx];
+			}
+
+			// Save cache on input
+			textarea.addEventListener("input", debounce(() => {
+				this.currentResponses[idx] = textarea.value.trim();
+				this.saveCurrentStateToCache();
+			}, 500));
 
 			const addBtn = card.createEl("button", {
 				text: "Add to Note",
@@ -581,12 +825,117 @@ ${noteContent}`;
 			});
 		}
 
-		// Regenerate button at bottom
-		const resetBtn = container.createEl("button", {
+		// Bottom buttons
+		const bottomRow = container.createDiv({ cls: "deep-notes-btn-row" });
+		bottomRow.style.marginTop = "16px";
+
+		const resetBtn = bottomRow.createEl("button", {
 			text: "Regenerate",
-			cls: "deep-notes-generate-btn deep-notes-regenerate",
+			cls: "deep-notes-generate-btn",
 		});
 		resetBtn.addEventListener("click", () => this.triggerGeneration());
+
+		const histBtn = bottomRow.createEl("button", {
+			cls: "deep-notes-generate-btn deep-notes-history-btn deep-notes-icon-btn",
+		});
+		const histBtnIcon = histBtn.createSpan({ cls: "deep-notes-btn-icon" });
+		setIcon(histBtnIcon, "history");
+		histBtn.createSpan({ text: "History" });
+		histBtn.addEventListener("click", () => {
+			this.viewMode = "history";
+			this.render();
+		});
+	}
+
+	private renderHistory(container: HTMLElement): void {
+		const file = this.app.workspace.getActiveFile();
+		if (!file) {
+			container.createDiv({
+				cls: "deep-notes-loading",
+				text: "No active note.",
+			});
+			return;
+		}
+
+		const sessions = getSessionsForNote(this.plugin, file.path);
+
+		// Back button
+		const backBtn = container.createEl("button", {
+			cls: "deep-notes-generate-btn deep-notes-regenerate deep-notes-icon-btn",
+		});
+		const backIcon = backBtn.createSpan({ cls: "deep-notes-btn-icon" });
+		setIcon(backIcon, "arrow-left");
+		backBtn.createSpan({ text: "Back" });
+		backBtn.addEventListener("click", () => {
+			this.viewMode = "questions";
+			this.render();
+		});
+
+		if (sessions.length === 0) {
+			container.createDiv({
+				cls: "deep-notes-loading",
+				text: "No past sessions for this note.",
+			});
+			return;
+		}
+
+		container.createEl("h5", {
+			text: `${sessions.length} Past Session${sessions.length > 1 ? "s" : ""}`,
+			cls: "deep-notes-history-title",
+		});
+
+		for (const session of sessions) {
+			const card = container.createDiv({ cls: "deep-notes-card deep-notes-history-card" });
+
+			const dateStr = new Date(session.timestamp).toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric",
+				year: "numeric",
+				hour: "2-digit",
+				minute: "2-digit",
+			});
+
+			const meta = card.createDiv({ cls: "deep-notes-history-meta" });
+			meta.createEl("span", { text: dateStr, cls: "deep-notes-history-date" });
+
+			if (session.evaluation) {
+				const scoreClass =
+					session.evaluation.score >= 80 ? "score-green" :
+						session.evaluation.score >= 50 ? "score-yellow" : "score-red";
+				meta.createEl("span", {
+					text: `${session.evaluation.score}%`,
+					cls: `deep-notes-badge deep-notes-history-score ${scoreClass}`,
+				});
+			} else {
+				meta.createEl("span", {
+					text: "Not evaluated",
+					cls: "deep-notes-badge",
+				});
+			}
+
+			card.createEl("p", {
+				text: `${session.items.length} questions · ${session.responses.filter((r) => r.length > 0).length} answered`,
+				cls: "deep-notes-history-summary",
+			});
+
+			const actions = card.createDiv({ cls: "deep-notes-history-actions" });
+
+			const loadBtn = actions.createEl("button", {
+				text: "Load",
+				cls: "deep-notes-add-btn",
+			});
+			loadBtn.addEventListener("click", () => this.loadSession(session));
+
+			const delBtn = actions.createEl("button", {
+				text: "Delete",
+				cls: "deep-notes-add-btn deep-notes-delete-btn",
+			});
+			delBtn.addEventListener("click", async () => {
+				await deleteSession(this.plugin, session.id);
+				new Notice("Session deleted.");
+				this.render();
+			});
+		}
 	}
 
 	private renderImagePicker(container: HTMLElement): void {
@@ -684,6 +1033,35 @@ ${noteContent}`;
 		});
 	}
 
+	private renderFlowchartGuide(container: HTMLElement): void {
+		const guide = container.createDiv({ cls: "deep-notes-flowchart" });
+		guide.createEl("p", { text: "How it works", cls: "deep-notes-flowchart-title" });
+
+		const steps = [
+			{ icon: "file-text", label: "Open a note", desc: "Navigate to any markdown note" },
+			{ icon: "lightbulb", label: "Generate questions", desc: "AI reads your note and creates questions" },
+			{ icon: "pencil", label: "Answer them", desc: "Type your responses to test your understanding" },
+			{ icon: "bar-chart-2", label: "Evaluate", desc: "Get a score and feedback on your answers" },
+			{ icon: "calendar", label: "Review later", desc: "Sessions are saved and review is scheduled" },
+		];
+
+		for (let i = 0; i < steps.length; i++) {
+			const step = steps[i];
+
+			const node = guide.createDiv({ cls: "deep-notes-flow-node" });
+			const iconEl = node.createDiv({ cls: "deep-notes-flow-icon" });
+			setIcon(iconEl, step.icon);
+			const textEl = node.createDiv({ cls: "deep-notes-flow-text" });
+			textEl.createEl("span", { text: step.label, cls: "deep-notes-flow-label" });
+			textEl.createEl("span", { text: step.desc, cls: "deep-notes-flow-desc" });
+
+			// Connector line between nodes
+			if (i < steps.length - 1) {
+				guide.createDiv({ cls: "deep-notes-flow-connector" });
+			}
+		}
+	}
+
 	private async renderIndexStatus(container: HTMLElement): Promise<void> {
 		const statusDiv = container.createDiv({ cls: "deep-notes-index-status" });
 
@@ -718,7 +1096,7 @@ ${noteContent}`;
 	private renderEvaluationResult(container: HTMLElement): void {
 		const result = this.evaluationResult!;
 
-		// Score display
+		// Big overall score display
 		const scoreSection = container.createDiv({ cls: "deep-notes-score-section" });
 		const scoreColorClass =
 			result.score >= 80 ? "score-green" :
@@ -744,14 +1122,22 @@ ${noteContent}`;
 			});
 		}
 
-		// Per-question feedback
+		// Per-question feedback — compact with inline mini score
 		for (const fb of result.feedback) {
 			const card = container.createDiv({ cls: "deep-notes-feedback-card" });
 
+			// Header row: rating badge (small) + individual score
+			const fbHeader = card.createDiv({ cls: "deep-notes-feedback-header" });
 			const ratingClass = `rating-${fb.rating}`;
-			card.createEl("span", {
+			fbHeader.createEl("span", {
 				text: fb.rating.charAt(0).toUpperCase() + fb.rating.slice(1),
 				cls: `deep-notes-badge deep-notes-rating-badge ${ratingClass}`,
+			});
+			// Show individual score as small text
+			const individualScore = fb.rating === "correct" ? 100 : fb.rating === "partial" ? 50 : 0;
+			fbHeader.createEl("span", {
+				text: `${individualScore}%`,
+				cls: `deep-notes-individual-score ${ratingClass}`,
 			});
 
 			card.createEl("p", {
@@ -763,10 +1149,28 @@ ${noteContent}`;
 				text: fb.explanation,
 				cls: "deep-notes-feedback-explanation",
 			});
+
+			// Suggested answer (collapsible)
+			if (fb.suggestedAnswer) {
+				const details = card.createEl("details", {
+					cls: "deep-notes-suggested-answer",
+				});
+				const summary = details.createEl("summary");
+				const summaryIcon = summary.createSpan({ cls: "deep-notes-btn-icon" });
+				setIcon(summaryIcon, "message-circle");
+				summary.createSpan({ text: " Suggested Answer" });
+				details.createEl("p", {
+					text: fb.suggestedAnswer,
+					cls: "deep-notes-suggested-answer-text",
+				});
+			}
 		}
 
+		// Action buttons
+		const btnRow = container.createDiv({ cls: "deep-notes-btn-row" });
+
 		// Schedule Review button
-		const scheduleBtn = container.createEl("button", {
+		const scheduleBtn = btnRow.createEl("button", {
 			text: "Schedule Review",
 			cls: "deep-notes-generate-btn deep-notes-schedule-btn",
 		});
@@ -778,12 +1182,13 @@ ${noteContent}`;
 		scheduleBtn.addEventListener("click", () => this.scheduleReview());
 
 		// Back button
-		const backBtn = container.createEl("button", {
+		const backBtn = btnRow.createEl("button", {
 			text: "Back to Questions",
 			cls: "deep-notes-generate-btn deep-notes-regenerate",
 		});
 		backBtn.addEventListener("click", () => {
 			this.evaluationResult = null;
+			this.viewMode = "questions";
 			this.render();
 		});
 	}
