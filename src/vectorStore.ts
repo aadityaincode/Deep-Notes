@@ -48,9 +48,15 @@ export class VaultVectorStore {
         await this.removeNote(file.path);
 
         const chunks = chunkNote(content, file.path);
+        console.log(`[DeepNotes] Chunked ${file.path} into ${chunks.length} chunks`);
 
         for (const chunk of chunks) {
             const vector = await embedFn(chunk.text);
+            if (!vector || vector.length === 0) {
+                console.warn(`[DeepNotes] Empty vector for chunk in ${file.path}`);
+                continue;
+            }
+            console.log(`[DeepNotes] Inserting chunk ${chunk.chunkIndex} (vector dim: ${vector.length})`);
             await this.index.insertItem({
                 vector,
                 metadata: {
@@ -74,12 +80,19 @@ export class VaultVectorStore {
         }
     }
 
+    async clearIndex(): Promise<void> {
+        if (await this.index.isIndexCreated()) {
+            await this.index.deleteIndex();
+            await this.index.createIndex();
+        }
+    }
+
     async search(
         queryEmbedding: number[],
         topK: number,
         excludeFilePath?: string
     ): Promise<SearchResult[]> {
-        const results = await this.index.queryItems(queryEmbedding, "", topK + 5);
+        const results = await this.index.queryItems(queryEmbedding, "", topK + 5, undefined);
 
         return results
             .filter((r) => {

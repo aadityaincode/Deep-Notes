@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	ollamaBaseUrl: "http://127.0.0.1:11434",
 	model: "gpt-4o-mini",
 	systemPrompt: DEFAULT_SYSTEM_PROMPT,
-	embeddingProvider: "transformers",
+	embeddingProvider: "gemini",
 	history: [],
 };
 
@@ -164,24 +164,21 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		containerEl.createEl("h2", { text: "Cross-Topic Search" });
 
 		new Setting(containerEl)
-			.setName("Embedding Provider")
+			.setName("Embedding Model")
 			.setDesc(
-				"Choose how to generate embeddings for vault search. Transformers.js runs offline in your browser (no API key needed). Gemini uses the cloud embedding API."
+				"Deep Notes now uses Google Gemini for embeddings (768 dimensions). This requires a Gemini API key."
 			)
-			.addDropdown((dropdown) => {
-				dropdown.addOption("transformers", "Transformers.js (Local)");
-				dropdown.addOption("gemini", "Gemini Embedding API");
-				dropdown
-					.setValue(this.plugin.settings.embeddingProvider)
-					.onChange(async (value) => {
-						this.plugin.settings.embeddingProvider = value as EmbeddingProvider;
-						await this.plugin.saveSettings();
-					});
-			});
+			.addText((text) =>
+				text
+					.setValue("gemini-embedding-001")
+					.setDisabled(true)
+			);
 
-		if (this.plugin.settings.embeddingProvider === "gemini" && !this.plugin.settings.geminiApiKey) {
+		if (!this.plugin.settings.geminiApiKey) {
 			const warning = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
-			warning.setText("⚠️ Gemini embeddings require a Gemini API key. Set it above by selecting Gemini as the AI provider.");
+			warning.setText("⚠️ Gemini API Key is required for Cross-Topic Search. Please set it above.");
+			warning.style.color = "var(--text-error)";
+			warning.style.marginTop = "10px";
 		}
 	}
 }

@@ -139,11 +139,29 @@ async function findOllamaFallbackModel(model: string, normalizedBase: string): P
 }
 
 function parseResponse(content: string): DeepNotesItem[] {
-	// Try to extract JSON from the response (handles markdown code fences)
-	const jsonMatch = content.match(/\[[\s\S]*\]/);
-	if (jsonMatch) {
+	// 1. Try to find JSON inside markdown code blocks first
+	const codeBlockMatch = content.match(/```(?:json)?\s*(\[\s*\{[\s\S]*\}\s*\])\s*```/i);
+	let jsonCandidate = codeBlockMatch ? codeBlockMatch[1] : null;
+
+	// 2. If no code block, try to find the outer brackets
+	if (!jsonCandidate) {
+		const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+		if (jsonMatch) {
+			jsonCandidate = jsonMatch[0];
+		}
+	}
+
+	if (jsonCandidate) {
 		try {
-			const parsed = JSON.parse(jsonMatch[0]);
+			// 3. Clean up common LLM JSON errors
+			// Remove trailing commas before closing braces/brackets
+			const cleaned = jsonCandidate
+				.replace(/,\s*([\]}])/g, "$1") // trailing commas
+				.replace(/[\x00-\x1F\x7F]/g, (c) => { // control chars (except whitespace)
+					return ["\r", "\n", "\t"].includes(c) ? c : "";
+				});
+
+			const parsed = JSON.parse(cleaned);
 			if (Array.isArray(parsed)) {
 				return parsed.map((item: { type?: string; text?: string; sourceExcerpt?: string; sourceNote?: string }) => ({
 					type: item.type === "knowledge-expansion" || item.type === "question"
@@ -156,12 +174,16 @@ function parseResponse(content: string): DeepNotesItem[] {
 					sourceNote: item.sourceNote,
 				}));
 			}
-		} catch {
-			// fall through
+		} catch (e) {
+			console.warn("Deep Notes: JSON parse failed", e);
+			// fall through to fallback
 		}
 	}
 
-	return [{ type: "suggestion", text: content.trim() }];
+	// Fallback: If parsing fails, try to present the content reasonably
+	// If it looks like code, strip the ticks for display
+	const cleanText = content.replace(/```json/g, "").replace(/```/g, "").trim();
+	return [{ type: "suggestion", text: cleanText }];
 }
 
 async function callOpenAI(

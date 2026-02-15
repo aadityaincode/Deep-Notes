@@ -1,4 +1,4 @@
-import { Plugin, TFile, debounce } from "obsidian";
+import { Plugin, TFile, debounce, Notice } from "obsidian";
 import { VIEW_TYPE_DEEP_NOTES } from "./constants";
 import {
 	DeepNotesSettings,
@@ -18,7 +18,7 @@ export default class DeepNotesPlugin extends Plugin {
 		await this.loadSettings();
 
 		// Initialize vector store
-		const pluginDir = this.manifest.dir!;
+		const pluginDir = this.manifest.dir;
 		const vaultBasePath = (this.app.vault.adapter as any).basePath;
 		const fullPluginDir = `${vaultBasePath}/${pluginDir}`;
 		this.vectorStore = new VaultVectorStore(fullPluginDir);
@@ -38,6 +38,45 @@ export default class DeepNotesPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "check-similar-notes",
+			name: "Check Similar Notes for Current File (Debug)",
+			callback: async () => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file) {
+					new Notice("No active file.");
+					return;
+				}
+
+				try {
+					new Notice(`Checking similarity for ${file.basename}...`);
+					const content = await this.app.vault.read(file);
+					const { getEmbedding } = await import("./embeddings");
+					const embedding = await getEmbedding(content, this.settings);
+
+					if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+						new Notice("Embedding failed (empty or invalid).");
+						console.error("[DeepNotes] Invalid embedding:", embedding);
+						return;
+					}
+
+					console.log(`[DeepNotes] Searching with embedding (dim: ${embedding.length})`);
+					const results = await this.vectorStore.search(embedding, 5, file.path);
+
+					if (results.length === 0) {
+						new Notice("No similar notes found (score > 0).");
+					} else {
+						const msg = results.map(r => `${r.noteTitle} (${(r.score).toFixed(4)})`).join("\n");
+						new Notice(`Top matches:\n${msg}`, 5000);
+						console.log("[DeepNotes] Similarity Results:", results);
+					}
+				} catch (e) {
+					new Notice(`Error checking similarity: ${e}`);
+					console.error(e);
+				}
+			},
+		});
+
+		this.addCommand({
 			id: "generate-deep-notes-questions",
 			name: "Generate Deep Notes Questions",
 			callback: async () => {
@@ -48,10 +87,39 @@ export default class DeepNotesPlugin extends Plugin {
 			},
 		});
 
+
 		this.addCommand({
 			id: "index-vault",
 			name: "Index Vault for Cross-Topic Search",
 			callback: () => this.indexer.indexVault(),
+		});
+
+		this.addCommand({
+			id: "clear-index",
+			name: "Clear Semantic Search Index",
+			callback: async () => {
+				new Notice("Clearing vector index...");
+				try {
+					await this.vectorStore.clearIndex();
+					new Notice("Index cleared. Please re-index vault.");
+				} catch (e) {
+					new Notice(`Failed to clear index: ${e}`);
+				}
+			},
+		});
+
+		this.addCommand({
+			id: "show-index-stats",
+			name: "Show Semantic Index Stats (Debug)",
+			callback: async () => {
+				try {
+					const stats = await this.vectorStore.getStats();
+					new Notice(`Index contains ${stats.totalChunks} chunks.`);
+					console.log("[DeepNotes] Index Stats:", stats);
+				} catch (e) {
+					new Notice(`Error getting stats: ${e}`);
+				}
+			},
 		});
 
 		// Incremental re-indexing on file modify

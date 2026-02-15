@@ -1,32 +1,12 @@
 import type { DeepNotesSettings } from "./settings";
 
-export type EmbeddingProvider = "transformers" | "gemini";
-
-// Singleton for the Transformers.js pipeline
-let pipelineInstance: any = null;
-let pipelineLoading: Promise<any> | null = null;
-
-async function getTransformersPipeline(): Promise<any> {
-    if (pipelineInstance) return pipelineInstance;
-    if (pipelineLoading) return pipelineLoading;
-
-    pipelineLoading = (async () => {
-        const { pipeline } = await import("@xenova/transformers");
-        pipelineInstance = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-        return pipelineInstance;
-    })();
-
-    return pipelineLoading;
-}
-
-async function embedWithTransformers(text: string): Promise<number[]> {
-    const extractor = await getTransformersPipeline();
-    const output = await extractor(text, { pooling: "mean", normalize: true });
-    return Array.from(output.data as Float32Array);
-}
+export type EmbeddingProvider = "gemini";
 
 async function embedWithGemini(text: string, apiKey: string): Promise<number[]> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
+    if (!apiKey) {
+        throw new Error("Gemini API key is required but not set.");
+    }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`;
     const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -36,7 +16,14 @@ async function embedWithGemini(text: string, apiKey: string): Promise<number[]> 
     });
 
     if (!response.ok) {
-        const err = await response.text();
+        let err = await response.text();
+        try {
+            // Try to parse JSON error for cleaner message
+            const jsonErr = JSON.parse(err);
+            if (jsonErr.error && jsonErr.error.message) {
+                err = jsonErr.error.message;
+            }
+        } catch (_) { /* ignore */ }
         throw new Error(`Gemini Embedding API error (${response.status}): ${err}`);
     }
 
@@ -48,27 +35,11 @@ export async function getEmbedding(
     text: string,
     settings: DeepNotesSettings
 ): Promise<number[]> {
-    const provider: EmbeddingProvider = settings.embeddingProvider;
-    switch (provider) {
-        case "transformers":
-            return embedWithTransformers(text);
-        case "gemini":
-            if (!settings.geminiApiKey) {
-                throw new Error("Gemini API key required for Gemini embeddings.");
-            }
-            return embedWithGemini(text, settings.geminiApiKey);
-        default: {
-            const _exhaustive: never = provider;
-            throw new Error(`Unknown embedding provider: ${_exhaustive}`);
-        }
-    }
+    // Intentionally ignore settings.embeddingProvider and force Gemini
+    // Clean up settings later if needed
+    return embedWithGemini(text, settings.geminiApiKey);
 }
 
-export function getEmbeddingDimension(provider: EmbeddingProvider): number {
-    switch (provider) {
-        case "transformers":
-            return 384;
-        case "gemini":
-            return 768;
-    }
+export function getEmbeddingDimension(): number {
+    return 768; // Gemini embedding-001
 }

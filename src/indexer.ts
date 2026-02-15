@@ -27,6 +27,7 @@ export class VaultIndexer {
         const files = this.plugin.app.vault.getMarkdownFiles();
         let indexed = 0;
         let skipped = 0;
+        let failed = 0;
 
         new Notice(`Indexing vault: ${files.length} notes found...`);
 
@@ -42,18 +43,29 @@ export class VaultIndexer {
                     continue;
                 }
 
-                await this.indexSingleNote(file);
-                indexed++;
+                try {
+                    await this.indexSingleNote(file);
+                    indexed++;
+                } catch (e) {
+                    failed++;
+                    console.error(`[DeepNotes] Skipping ${file.path} due to error.`);
+                }
 
                 // Progress update every 10 notes
-                if (indexed % 10 === 0) {
-                    new Notice(`Indexing... ${indexed}/${files.length - skipped} notes`);
+                if ((indexed + failed) % 10 === 0) {
+                    new Notice(`Indexing... ${indexed + failed}/${files.length - skipped} notes`);
                 }
             }
 
-            new Notice(
-                `Vault indexed! ${indexed} notes indexed, ${skipped} unchanged.`
-            );
+            if (failed > 0) {
+                new Notice(
+                    `Index complete with errors! ${indexed} success, ${failed} failed. Check console for details.`
+                );
+            } else {
+                new Notice(
+                    `Vault indexed! ${indexed} notes indexed, ${skipped} unchanged.`
+                );
+            }
         } catch (e) {
             new Notice(
                 `Indexing error: ${e instanceof Error ? e.message : String(e)}`
@@ -65,12 +77,15 @@ export class VaultIndexer {
 
     async indexSingleNote(file: TFile): Promise<void> {
         try {
+            console.log(`[DeepNotes] Indexing: ${file.path}`);
             const content = await this.plugin.app.vault.read(file);
             const embedFn = (text: string) =>
                 getEmbedding(text, this.plugin.settings);
             await this.vectorStore.indexNote(file, content, embedFn);
+            console.log(`[DeepNotes] Automatically indexed ${file.path}`);
         } catch (e) {
-            console.error(`Failed to index ${file.path}:`, e);
+            console.error(`[DeepNotes] Failed to index ${file.path}:`, e);
+            throw e; // Propagate error to count as failure
         }
     }
 }

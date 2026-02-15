@@ -176,6 +176,9 @@ export class DeepNotesView extends ItemView {
 		this.render();
 
 		try {
+			// Auto-index vault before generation (skips unchanged files)
+			await this.plugin.indexer.indexVault();
+
 			const content = await this.app.vault.read(file);
 
 			// Search for related notes via vector store
