@@ -760,14 +760,15 @@ ${noteContent}`;
 		});
 	}
 
-	private renderQuestionList(items: DeepNotesItem[], container: HTMLElement, depth = 0): void {
+	private renderQuestionList(items: DeepNotesItem[], container: HTMLElement, depth = 0, rootIndex?: number): void {
 		for (let idx = 0; idx < items.length; idx++) {
-			this.renderQuestionCard(items[idx], container, idx, depth);
+			const effectiveRootIndex = depth === 0 ? idx : (rootIndex ?? 0);
+			this.renderQuestionCard(items[idx], container, idx, depth, effectiveRootIndex);
 		}
 	}
 
-	private renderQuestionCard(item: DeepNotesItem, container: HTMLElement, idx: number, depth: number): void {
-		const color = HIGHLIGHT_COLORS[(idx + depth) % HIGHLIGHT_COLORS.length];
+	private renderQuestionCard(item: DeepNotesItem, container: HTMLElement, idx: number, depth: number, rootIndex: number): void {
+		const color = HIGHLIGHT_COLORS[rootIndex % HIGHLIGHT_COLORS.length];
 		// If depth > 0, make it slightly indented or distinct
 		const card = container.createDiv({ cls: depth > 0 ? "deep-notes-card deep-notes-sub-card" : "deep-notes-card" });
 
@@ -953,7 +954,7 @@ ${noteContent}`;
 		// Recursively render sub-questions
 		if (item.subItems && item.subItems.length > 0) {
 			const subContainer = container.createDiv({ cls: "deep-notes-sub-questions" });
-			this.renderQuestionList(item.subItems, subContainer, depth + 1);
+			this.renderQuestionList(item.subItems, subContainer, depth + 1, rootIndex);
 		}
 
 
