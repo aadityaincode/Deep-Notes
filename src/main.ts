@@ -135,6 +135,15 @@ export default class DeepNotesPlugin extends Plugin {
 			)
 		);
 
+		// Remove vectors for deleted notes from the index
+		this.registerEvent(
+			this.app.vault.on("delete", async (file: TFile) => {
+				if (file.extension === "md") {
+					await this.vectorStore.removeNote(file.path);
+				}
+			})
+		);
+
 		this.addSettingTab(new DeepNotesSettingTab(this.app, this));
 
 		// Register CM6 editor extension for highlights
