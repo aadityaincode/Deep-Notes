@@ -81,7 +81,7 @@
 .deep-notes-icon-btn {
 	display: flex;
 	align-items: center;
-	justify-content: center;
+	justify-content: flex-start;
 	gap: 8px;
 }
 

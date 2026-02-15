@@ -28,6 +28,7 @@ After answering questions, you can trigger an evaluation. The system:
 Deep Notes builds a local vector index of your vault.
 -   It chunks your notes and generates embeddings (using local models or APIs).
 -   This allows the plugin to find "Related Concepts" from other files even if they don't share keywords, enabling the **Cross-Topic** questions.
+-   **Cross-topic validation**: If the AI references a note that doesn't exist in your vault, the question is automatically demoted to a knowledge-expansion question so you never see a broken link.
 
 ### Multimodal Support (OCR & Vision)
 -   **Images**: The plugin can scan images in your notes using OCR (Tesseract) or Vision Models (Gemini 2.0 Flash).
@@ -35,10 +36,17 @@ Deep Notes builds a local vector index of your vault.
 -   This allows the AI to ask questions about charts, diagrams, and handwritten notes.
 
 ### Spaced Repetition Integration
-Based on your evaluation score, the plugin schedules a review.
--   Low scores trigger a review sooner (e.g., tomorrow).
--   High scores push the review date further out.
--   The review is automatically appended to your Daily Note for that future date.
+Based on your evaluation score, the plugin schedules a review in a `reviews/` subfolder next to the source note.
+
+| Score | Review Delay |
+|-------|--------------|
+| ≥ 90% | 14 days |
+| ≥ 75% | 7 days |
+| ≥ 50% | 3 days |
+| < 50% | 1 day |
+
+-   The review file is created at e.g. `Lecture Notes/reviews/2026-02-22 Review.md`.
+-   If multiple notes schedule reviews for the same date, they are appended to the same file.
 
 ---
 
@@ -86,7 +94,7 @@ Choose your backend:
     -   **Incorrect**: Red badge.
 
 ### 4. Review
--   Click **Schedule Review** to add a reminder to your future Daily Note based on your score.
+-   Click **Schedule Review** to create a review note in a `reviews/` subfolder next to the current note, scheduled based on your score.
 -   Access past sessions via the **History** button to retake quizzes.
 
 ---

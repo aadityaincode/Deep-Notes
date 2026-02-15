@@ -2,6 +2,7 @@ import { ItemView, Notice, WorkspaceLeaf, TFile, debounce, setIcon } from "obsid
 import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT, AIProvider } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult, generateDeepNotesSubQuestions } from "./ai";
 import { getEmbedding } from "./embeddings";
+import type { SearchResult } from "./vectorStore";
 import { listEmbeddedImages, loadImagesByPaths, resolveExcalidrawEmbeddedImages, extractExcalidrawAnnotations, ImageInfo, ImagePayload } from "./ocr";
 import { saveSession, getSessionsForNote, deleteSession, QASession } from "./history";
 import { HIGHLIGHT_COLORS, applyHighlights, clearAllHighlights, scrollToExcerpt, findExcerptInText } from "./highlights";
@@ -224,10 +225,22 @@ export class DeepNotesView extends ItemView {
 				this.items = this.items.filter((item) => item.type !== "cross-topic");
 			}
 
-			// Filter out cross-topic questions if no related notes were provided
-			// (the LLM sometimes generates them anyway)
-			if (!relatedContext) {
-				this.items = this.items.filter((item) => item.type !== "cross-topic");
+			// Correct AI-generated sourceNote values to match actual vault filenames.
+			// If the AI hallucinated a note that doesn't exist, demote to knowledge-expansion.
+			if (relatedContext) {
+				const vaultFiles = this.app.vault.getMarkdownFiles();
+				for (const item of this.items) {
+					if (item.type === "cross-topic" && item.sourceNote) {
+						const resolved = this.resolveSourceNote(item.sourceNote, relatedContext, vaultFiles);
+						if (resolved) {
+							item.sourceNote = resolved;
+						} else {
+							// Note doesn't exist — demote so no broken link is shown
+							item.type = "knowledge-expansion";
+							item.sourceNote = undefined;
+						}
+					}
+				}
 			}
 
 
@@ -518,6 +531,62 @@ ${noteContent}`;
 		this.saveCurrentStateToCache();
 	}
 
+	/**
+	 * Resolves an AI-generated sourceNote name to an actual vault filename.
+	 * The AI often drops number prefixes (e.g. returns "Binary Search Tree"
+	 * when the real file is "6 - Binary Search Tree").
+	 */
+	private resolveSourceNote(
+		aiName: string,
+		relatedContext: SearchResult[],
+		vaultFiles: TFile[]
+	): string | null {
+		const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+		const aiNorm = normalise(aiName);
+
+		// 1. Exact basename match (already correct)
+		if (vaultFiles.some((f) => f.basename === aiName)) return aiName;
+
+		// 2. Match against noteTitle values from the vector search results
+		for (const ctx of relatedContext) {
+			if (normalise(ctx.noteTitle) === aiNorm || normalise(ctx.noteTitle).includes(aiNorm) || aiNorm.includes(normalise(ctx.noteTitle))) {
+				return ctx.noteTitle;
+			}
+		}
+
+		// 3. Fuzzy match against all vault files (basename contains the AI name or vice versa)
+		for (const f of vaultFiles) {
+			const fNorm = normalise(f.basename);
+			if (fNorm === aiNorm || fNorm.includes(aiNorm) || aiNorm.includes(fNorm)) {
+				return f.basename;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Finds a TFile by name with fuzzy matching.
+	 */
+	private findNoteFile(name: string, files: TFile[]): TFile | null {
+		const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+		const target = normalise(name);
+
+		// Exact match first
+		const exact = files.find((f) => f.basename === name);
+		if (exact) return exact;
+
+		// Fuzzy: basename contains name or name contains basename
+		for (const f of files) {
+			const fNorm = normalise(f.basename);
+			if (fNorm === target || fNorm.includes(target) || target.includes(fNorm)) {
+				return f;
+			}
+		}
+
+		return null;
+	}
+
 	private getReviewDate(score: number): Date {
 		const now = new Date();
 		let daysUntilReview: number;
@@ -568,11 +637,12 @@ ${noteContent}`;
 		const dateStr = reviewDate.toISOString().split("T")[0];
 		const noteName = file.basename;
 
-		const { folder, format } = this.getDailyNoteSettings();
-		const dailyNoteName = this.formatDateForDailyNote(reviewDate, format);
-		const dailyNotePath = folder
-			? `${folder}/${dailyNoteName}.md`
-			: `${dailyNoteName}.md`;
+		// Create review note in a "reviews" subfolder next to the source note
+		const parentFolder = file.parent?.path || "";
+		const reviewsFolder = parentFolder
+			? `${parentFolder}/reviews`
+			: "reviews";
+		const reviewFilePath = `${reviewsFolder}/${dateStr} Review.md`;
 
 		const questions = this.evaluationResult.feedback
 			.map((f) => `- ${f.question}`)
@@ -590,17 +660,15 @@ ${noteContent}`;
 			"",
 		].join("\n");
 
-		const existingFile = this.app.vault.getAbstractFileByPath(dailyNotePath);
+		const existingFile = this.app.vault.getAbstractFileByPath(reviewFilePath);
 		if (existingFile) {
 			await this.app.vault.append(existingFile as TFile, reviewBlock);
 		} else {
-			if (folder) {
-				await this.ensureFolderExists(folder);
-			}
-			await this.app.vault.create(dailyNotePath, reviewBlock.trimStart());
+			await this.ensureFolderExists(reviewsFolder);
+			await this.app.vault.create(reviewFilePath, reviewBlock.trimStart());
 		}
 
-		new Notice(`Review scheduled for ${dateStr}! Check your daily note.`);
+		new Notice(`Review scheduled for ${dateStr}! Check ${reviewsFolder}/`);
 	}
 
 	private async ensureFolderExists(path: string): Promise<void> {
@@ -819,9 +887,7 @@ ${noteContent}`;
 			sourceLink.addEventListener("click", async (e) => {
 				e.preventDefault();
 				const files = this.app.vault.getMarkdownFiles();
-				const target = files.find(
-					(f) => f.basename === item.sourceNote
-				);
+				const target = this.findNoteFile(item.sourceNote!, files);
 				if (target) {
 					await this.app.workspace.openLinkText(target.path, "");
 				} else {
@@ -1291,10 +1357,10 @@ ${noteContent}`;
 		}
 
 		// Action buttons
-		const btnRow = container.createDiv({ cls: "deep-notes-btn-row" });
+		const btnStack = container.createDiv({ cls: "deep-notes-btn-stack" });
 
 		// Schedule Review button
-		const scheduleBtn = btnRow.createEl("button", {
+		const scheduleBtn = btnStack.createEl("button", {
 			text: "Schedule Review",
 			cls: "deep-notes-generate-btn deep-notes-schedule-btn",
 		});
@@ -1306,7 +1372,7 @@ ${noteContent}`;
 		scheduleBtn.addEventListener("click", () => this.scheduleReview());
 
 		// Back button
-		const backBtn = btnRow.createEl("button", {
+		const backBtn = btnStack.createEl("button", {
 			text: "Back to Questions",
 			cls: "deep-notes-generate-btn deep-notes-regenerate",
 		});
