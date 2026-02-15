@@ -2,9 +2,11 @@ import { App, normalizePath, TFile } from "obsidian";
 
 export interface OCRSettings {
 	enabled: boolean;
-	visionModel: string;
+	provider: "ollama" | "gemini";
+	visionModel: string; // for Ollama
 	maxImages: number;
 	ollamaBaseUrl: string;
+	apiKey?: string; // for Gemini
 }
 
 export interface OCRExtractionResult {
@@ -41,9 +43,16 @@ export async function extractOcrDataFromNoteImages(
 	const extractedBlocks: string[] = [];
 	const debugLines: string[] = [
 		`Detected ${imageFiles.length} OCR source(s).`,
-		`Vision model: ${settings.visionModel}`,
-		`Ollama base URL: ${(settings.ollamaBaseUrl || "http://127.0.0.1:11434").replace(/\/$/, "")}`,
+		`Vision Provider: ${settings.provider}`,
 	];
+
+	if (settings.provider === "ollama") {
+		debugLines.push(`Vision model: ${settings.visionModel}`);
+		debugLines.push(`Ollama base URL: ${(settings.ollamaBaseUrl || "http://127.0.0.1:11434").replace(/\/$/, "")}`);
+	} else {
+		debugLines.push(`Gemini model: gemini-2.0-flash`);
+	}
+
 	for (let index = 0; index < imageFiles.length; index++) {
 		const imageFile = imageFiles[index];
 		if (isExcalidrawFile(imageFile)) {
@@ -65,10 +74,24 @@ export async function extractOcrDataFromNoteImages(
 
 		try {
 			const { base64, bytes } = await readImageAsBase64(app, imageFile);
-			debugLines.push(
-				`[${index + 1}] ${imageFile.path} (raster): uploaded ${bytes} byte(s) to Ollama vision model '${settings.visionModel}'.`
-			);
-			const text = await runOllamaVisionOCR(base64, settings.visionModel, settings.ollamaBaseUrl);
+			const mimeType = extensionToMime(imageFile.extension);
+
+			let text = "";
+			if (settings.provider === "gemini") {
+				if (!settings.apiKey) {
+					throw new Error("Gemini API key is required for Vision OCR.");
+				}
+				debugLines.push(
+					`[${index + 1}] ${imageFile.path} (raster): uploading ${bytes} bytes to Gemini Vision...`
+				);
+				text = await runGeminiVisionOCR(base64, mimeType, settings.apiKey);
+			} else {
+				debugLines.push(
+					`[${index + 1}] ${imageFile.path} (raster): uploading ${bytes} bytes to Ollama vision model '${settings.visionModel}'...`
+				);
+				text = await runOllamaVisionOCR(base64, settings.visionModel, settings.ollamaBaseUrl);
+			}
+
 			const cleaned = text.trim();
 			debugLines.push(
 				`[${index + 1}] OCR extraction result: ${cleaned ? `${cleaned.length} character(s)` : "no readable text"}.`
@@ -538,4 +561,47 @@ async function runOllamaVisionOCR(
 
 	const data = await response.json();
 	return data.message?.content ?? "";
+}
+
+async function runGeminiVisionOCR(
+	imageBase64: string,
+	mimeType: string,
+	apiKey: string,
+	model = "gemini-2.0-flash"
+): Promise<string> {
+	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+	const response = await fetch(url, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			contents: [
+				{
+					role: "user",
+					parts: [
+						{
+							inlineData: {
+								mimeType: mimeType,
+								data: imageBase64,
+							},
+						},
+						{
+							text: "Extract and transcribe all readable text from this image. Return plain text only. If no readable text is present, return an empty string.",
+						},
+					],
+				},
+			],
+			generationConfig: {
+				temperature: 0.2, // Low temp for OCR accuracy
+			},
+		}),
+	});
+
+	if (!response.ok) {
+		const err = await response.text();
+		throw new Error(`Gemini Vision API error (${response.status}): ${err}`);
+	}
+
+	const data = await response.json();
+	return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }

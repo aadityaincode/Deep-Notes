@@ -1,13 +1,16 @@
 import type { AIProvider } from "./constants";
-import { EVALUATION_SYSTEM_PROMPT } from "./constants";
 import type { SearchResult } from "./vectorStore";
 import type { ImagePayload } from "./ocr";
+import type { DeepNotesSettings } from "./settings";
+import { getEmbedding } from "./embeddings";
 
 export interface DeepNotesItem {
 	type: "knowledge-expansion" | "suggestion" | "cross-topic";
 	text: string;
 	sourceExcerpt?: string;
 	sourceNote?: string;
+	sampleAnswer?: string;
+	sampleAnswerEmbedding?: number[];
 }
 
 export interface EvaluationFeedback {
@@ -25,11 +28,8 @@ export interface EvaluationResult {
 
 export async function generateDeepNotesQuestions(
 	noteContent: string,
-	provider: AIProvider,
-	apiKey: string,
-	model: string,
+	settings: DeepNotesSettings,
 	systemPrompt: string,
-	ollamaBaseUrl?: string,
 	relatedContext?: SearchResult[],
 	images?: ImagePayload[]
 ): Promise<DeepNotesItem[]> {
@@ -44,6 +44,10 @@ export async function generateDeepNotesQuestions(
 
 	const imgs = images && images.length > 0 ? images : undefined;
 	let content: string;
+	const provider = settings.provider;
+	const apiKey = provider === "gemini" ? settings.geminiApiKey : (provider === "anthropic" ? settings.anthropicApiKey : settings.apiKey);
+	const model = settings.model;
+	const ollamaBaseUrl = settings.ollamaBaseUrl;
 
 	switch (provider) {
 		case "openai":
@@ -60,7 +64,23 @@ export async function generateDeepNotesQuestions(
 			break;
 	}
 
-	return parseResponse(content);
+	const items = parseResponse(content);
+
+	// Generate embeddings for sample answers
+	for (const item of items) {
+		if (item.sampleAnswer) {
+			try {
+				const embedding = await getEmbedding(item.sampleAnswer, settings);
+				if (embedding) {
+					item.sampleAnswerEmbedding = embedding;
+				}
+			} catch (e) {
+				console.warn("Deep Notes: Failed to generate embedding for sample answer", e);
+			}
+		}
+	}
+
+	return items;
 }
 
 async function callOllama(
@@ -266,6 +286,13 @@ function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
 		return null;
 	}
 
+	const sampleAnswer =
+		typeof item.sample_answer === "string"
+			? toHumanReadableText(item.sample_answer)
+			: typeof item.answer === "string"
+				? toHumanReadableText(item.answer)
+				: undefined;
+
 	const rawType = String(item.type ?? item.kind ?? item.category ?? "").toLowerCase();
 	const type: DeepNotesItem["type"] =
 		rawType === "knowledge-expansion" || rawType === "question"
@@ -292,7 +319,7 @@ function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
 					? item.relatedNote
 					: undefined;
 
-	return { type, text, sourceExcerpt, sourceNote };
+	return { type, text, sourceExcerpt, sourceNote, sampleAnswer };
 }
 
 function extractTextFieldsFromJsonLikeText(content: string): DeepNotesItem[] {
@@ -521,147 +548,87 @@ async function callProvider(
 
 export async function evaluateResponses(
 	noteContent: string,
-	questionsAndResponses: { question: string; response: string }[],
-	provider: AIProvider,
-	apiKey: string,
-	model: string,
-	ollamaBaseUrl?: string
+	items: DeepNotesItem[],
+	userResponses: string[],
+	settings: DeepNotesSettings,
+	model: string, // Kept for signature compatibility, though unused
+	ollamaBaseUrl?: string // Kept for signature compatibility
 ): Promise<EvaluationResult> {
-	const userMessage = `## Original Note Content
-${noteContent}
+	const feedback: EvaluationFeedback[] = [];
+	let totalScore = 0;
+	let validResponsesCount = 0;
 
-## Questions and Student Responses
-${questionsAndResponses.map((qr, i) => `### Question ${i + 1}
-**Q:** ${qr.question}
-**Student's Response:** ${qr.response}`).join("\n\n")}`;
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		const response = userResponses[i] || "";
+		let similarityScore = 0;
+		let rating: "correct" | "partial" | "incorrect" = "incorrect";
+		let explanation = "No response provided.";
 
-	const content = await callProvider(
-		userMessage,
-		provider,
-		apiKey,
-		model,
-		EVALUATION_SYSTEM_PROMPT,
-		ollamaBaseUrl
-	);
-
-	const parsed = parseEvaluationResponse(content);
-	return enforceEvaluationRubric(parsed, questionsAndResponses);
-}
-
-function enforceEvaluationRubric(
-	result: EvaluationResult,
-	questionsAndResponses: { question: string; response: string }[]
-): EvaluationResult {
-	if (questionsAndResponses.length === 0) {
-		return result;
-	}
-
-	const feedback = [...result.feedback];
-	let nonSubstantiveCount = 0;
-
-	for (const qa of questionsAndResponses) {
-		if (!isNonSubstantiveResponse(qa.response)) {
-			continue;
+		// Calculate similarity if we have both embeddings
+		if (item.sampleAnswerEmbedding && response.trim().length > 3) {
+			try {
+				const userEmbedding = await getEmbedding(response, settings);
+				if (userEmbedding && userEmbedding.length > 0) {
+					similarityScore = cosineSimilarity(item.sampleAnswerEmbedding, userEmbedding);
+				}
+			} catch (e) {
+				console.warn("Deep Notes: Failed to generate embedding for user response", e);
+			}
 		}
 
-		nonSubstantiveCount += 1;
-		const existingIndex = feedback.findIndex((f) => f.question.trim() === qa.question.trim());
-		const forcedFeedback: EvaluationFeedback = {
-			question: qa.question,
-			rating: "incorrect",
-			explanation: "No meaningful response provided.",
-		};
-
-		if (existingIndex >= 0) {
-			feedback[existingIndex] = forcedFeedback;
+		// Grading Logic (Pure Vector Similarity)
+		if (response.trim().length > 3) {
+			if (similarityScore >= 0.85) {
+				rating = "correct";
+				explanation = `Excellent! Your answer is semantically very close to the ideal response (Similarity: ${(similarityScore * 100).toFixed(1)}%).`;
+				totalScore += 100;
+			} else if (similarityScore >= 0.70) {
+				rating = "partial";
+				explanation = `Good effort. Your answer captures some of the meaning but differs significantly from the sample (Similarity: ${(similarityScore * 100).toFixed(1)}%).`;
+				totalScore += 50;
+			} else {
+				rating = "incorrect";
+				explanation = `Your answer seems to miss the key points of the ideal response (Similarity: ${(similarityScore * 100).toFixed(1)}%).`;
+				totalScore += 0;
+			}
+			validResponsesCount++;
 		} else {
-			feedback.push(forcedFeedback);
+			explanation = "No response provided.";
 		}
+
+		feedback.push({
+			question: item.text,
+			rating,
+			explanation,
+			suggestedAnswer: item.sampleAnswer // Include the sample answer for reference
+		});
 	}
 
-	if (nonSubstantiveCount === 0) {
-		return { ...result, feedback };
-	}
+	const finalScore = validResponsesCount > 0 ? Math.round(totalScore / items.length) : 0;
 
-	// Only cap the score proportionally — don't be overly punitive
-	const total = questionsAndResponses.length;
-	const validCount = Math.max(0, total - nonSubstantiveCount);
-	const proportionValid = validCount / total;
-	// Allow the AI-determined score to stand, but scale it down proportionally
-	// to the fraction of answered questions
-	const cap = validCount === 0 ? 5 : Math.max(20, Math.floor(proportionValid * result.score));
-	const score = Math.min(result.score, cap);
-	const summary =
-		validCount === 0
-			? "No substantive responses were provided."
-			: result.summary;
+	let summary = "";
+	if (finalScore >= 90) summary = "Outstanding! You have a deep understanding of this material.";
+	else if (finalScore >= 70) summary = "Great job! You grasped most concepts well.";
+	else if (finalScore >= 50) summary = "Good start. Review the partial matches to deepen your understanding.";
+	else summary = "Keep practicing. Focus on the core concepts and try again.";
 
 	return {
-		...result,
-		score,
+		score: finalScore,
 		feedback,
-		summary,
+		summary
 	};
 }
 
-function isNonSubstantiveResponse(response: string): boolean {
-	const trimmed = response.trim();
-	if (!trimmed) return true;
-
-	const normalized = trimmed.toLowerCase();
-	const fillerPhrases = [
-		"idk",
-		"i don't know",
-		"dont know",
-		"not sure",
-		"whatever",
-		"n/a",
-		"na",
-		"skip",
-		"no idea",
-	];
-
-	if (fillerPhrases.some((phrase) => normalized === phrase || normalized.includes(` ${phrase} `))) {
-		return true;
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+	if (vecA.length !== vecB.length) return 0;
+	let dot = 0;
+	let magA = 0;
+	let magB = 0;
+	for (let i = 0; i < vecA.length; i++) {
+		dot += vecA[i] * vecB[i];
+		magA += vecA[i] * vecA[i];
+		magB += vecB[i] * vecB[i];
 	}
-
-	const profanity = ["fuck", "shit", "bitch", "asshole", "wtf"];
-	if (profanity.some((word) => normalized.includes(word))) {
-		return true;
-	}
-
-	// Only flag truly empty/trivial responses — short but meaningful ones are fine
-	const words = normalized.match(/[a-z0-9]+/g) ?? [];
-	if (words.length === 0 || trimmed.length < 3) {
-		return true;
-	}
-
-	return false;
-}
-
-function parseEvaluationResponse(content: string): EvaluationResult {
-	const jsonMatch = content.match(/\{[\s\S]*\}/);
-	if (jsonMatch) {
-		try {
-			const parsed = JSON.parse(jsonMatch[0]);
-			return {
-				score: typeof parsed.score === "number" ? Math.max(0, Math.min(100, parsed.score)) : 50,
-				feedback: Array.isArray(parsed.feedback)
-					? parsed.feedback.map((f: Record<string, unknown>) => ({
-						question: String(f.question ?? ""),
-						rating: (["correct", "partial", "incorrect"].includes(f.rating as string)
-							? f.rating
-							: "partial") as "correct" | "partial" | "incorrect",
-						explanation: String(f.explanation ?? ""),
-						suggestedAnswer: typeof f.suggestedAnswer === "string" ? f.suggestedAnswer : undefined,
-					}))
-					: [],
-				summary: String(parsed.summary ?? ""),
-			};
-		} catch {
-			// fall through
-		}
-	}
-	// If parsing fails, return a neutral score rather than 0
-	return { score: 50, feedback: [], summary: "Could not parse evaluation — please try again." };
+	return magA === 0 || magB === 0 ? 0 : dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }

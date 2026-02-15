@@ -1,5 +1,5 @@
 import { ItemView, Notice, WorkspaceLeaf, TFile, debounce, setIcon } from "obsidian";
-import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT } from "./constants";
+import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT, AIProvider } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult } from "./ai";
 import { getEmbedding } from "./embeddings";
 import { listEmbeddedImages, loadImagesByPaths, resolveExcalidrawEmbeddedImages, extractExcalidrawAnnotations, ImageInfo, ImagePayload } from "./ocr";
@@ -68,7 +68,12 @@ export class DeepNotesView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.saveCurrentStateToCache();
-		clearAllHighlights(this.app);
+		// If we are closing, we should clear highlights from the last known path
+		if (this.lastNotePath) {
+			clearAllHighlights(this.app, this.lastNotePath);
+		} else {
+			clearAllHighlights(this.app);
+		}
 		this.contentEl.empty();
 	}
 
@@ -97,7 +102,7 @@ export class DeepNotesView extends ItemView {
 		// If changing files, save state of the OLD file
 		if (this.lastNotePath) {
 			this.saveCurrentStateToCache();
-			clearAllHighlights(this.app);
+			clearAllHighlights(this.app, this.lastNotePath);
 		}
 
 		this.lastNotePath = newPath;
@@ -142,7 +147,7 @@ export class DeepNotesView extends ItemView {
 
 	private applyQuestionHighlights(): void {
 		if (this.items.length === 0) {
-			clearAllHighlights(this.app);
+			clearAllHighlights(this.app, this.lastNotePath || undefined);
 			return;
 		}
 
@@ -155,7 +160,7 @@ export class DeepNotesView extends ItemView {
 
 		if (excerpts.length > 0) {
 			// Small delay to let the editor settle after render
-			setTimeout(() => applyHighlights(this.app, excerpts), 100);
+			setTimeout(() => applyHighlights(this.app, excerpts, this.lastNotePath || undefined), 100);
 		}
 	}
 
@@ -209,9 +214,12 @@ export class DeepNotesView extends ItemView {
 						this.app.vault.getMarkdownFiles().map((f) => f.path)
 					);
 					const validResults = results.filter((r) => existingFiles.has(r.filePath));
+					console.log(`[DeepNotes] Related context found: ${validResults.length} items`, validResults);
 					if (validResults.length > 0) {
 						relatedContext = validResults;
 					}
+				} else {
+					console.log("[DeepNotes] Vector store stats empty, skipping cross-topic search");
 				}
 			} catch (e) {
 				console.warn("Cross-topic search failed, generating without context:", e);
@@ -219,11 +227,8 @@ export class DeepNotesView extends ItemView {
 
 			this.items = await generateDeepNotesQuestions(
 				enrichedContent,
-				provider,
-				activeKey,
-				model,
+				this.plugin.settings,
 				systemPrompt,
-				ollamaBaseUrl,
 				relatedContext
 			);
 
@@ -288,11 +293,18 @@ export class DeepNotesView extends ItemView {
 			return;
 		}
 
-		const { provider, model, ollamaBaseUrl } = this.plugin.settings;
+		const { provider, model, ollamaBaseUrl, imageOcrProvider, geminiApiKey, imageOcrVisionModel } = this.plugin.settings;
 		const activeKey = this.getActiveKey();
 
+		// Check keys based on usage
 		if (provider !== "ollama" && !activeKey) {
-			new Notice("Please set your API key in Deep Notes settings.");
+			new Notice("Please set your main API key in Deep Notes settings.");
+			return;
+		}
+
+		// Check vision-specific key
+		if (imageOcrProvider === "gemini" && !geminiApiKey) {
+			new Notice("Gemini API Key is required for vision tasks.");
 			return;
 		}
 
@@ -357,11 +369,16 @@ export class DeepNotesView extends ItemView {
 				return;
 			}
 
-			this.loadingMessage = `Analyzing ${allImages.length} image(s) with ${model}...`;
+			// Determine which model/provider to use for VISION
+			const visionProvider = imageOcrProvider === "gemini" ? "gemini" : "ollama";
+			const visionModelName = imageOcrProvider === "gemini" ? "gemini-2.0-flash" : (imageOcrVisionModel || "llava");
+			const visionApiKey = imageOcrProvider === "gemini" ? geminiApiKey : "";
+
+			this.loadingMessage = `Analyzing ${allImages.length} image(s) with ${visionModelName}...`;
 			this.render();
 
 			console.log(
-				`[Deep Notes] Sending ${allImages.length} image(s) to ${provider}/${model}:\n` +
+				`[Deep Notes] Sending ${allImages.length} image(s) to ${visionProvider}/${visionModelName}:\n` +
 				allImages.map((img, i) => `  [${i + 1}] ${img.path} (${img.mimeType}, ${img.bytes} bytes)`).join("\n")
 			);
 
@@ -376,15 +393,21 @@ For background context only (do NOT generate questions about this text directly)
 
 ${noteContent}`;
 
+			// Create synthetic settings for vision generation
+			const visionSettings = {
+				...this.plugin.settings,
+				provider: visionProvider as AIProvider,
+				model: visionModelName,
+				// Ensure the correct key is available if it's generic, though ai.ts pulls from specific fields
+				// If visionProvider is 'gemini', ai.ts looks at settings.geminiApiKey, which is preserved in spread
+			};
+
 			this.items = await generateDeepNotesQuestions(
 				userText,
-				provider,
-				activeKey,
-				model,
+				visionSettings,
 				IMAGE_SCAN_SYSTEM_PROMPT,
-				ollamaBaseUrl,
 				undefined,
-				allImages.length > 0 ? allImages : undefined
+				allImages
 			);
 
 			if (this.items.length === 0) {
@@ -438,9 +461,9 @@ ${noteContent}`;
 
 			this.evaluationResult = await evaluateResponses(
 				noteContent,
-				questionsAndResponses,
-				provider,
-				activeKey,
+				this.items,
+				this.currentResponses,
+				this.plugin.settings,
 				model,
 				ollamaBaseUrl
 			);
@@ -591,14 +614,14 @@ ${noteContent}`;
 
 	private render(): void {
 
-		   // Always render into a dedicated root div inside contentEl
-		   let root = this.contentEl.querySelector<HTMLDivElement>(".deep-notes-container-root");
-		   if (!root) {
-			   root = this.contentEl.createDiv({ cls: "deep-notes-container-root" });
-		   }
-		   root.empty();
-		   root.addClass("deep-notes-container");
-		   const container = root;
+		// Always render into a dedicated root div inside contentEl
+		let root = this.contentEl.querySelector<HTMLDivElement>(".deep-notes-container-root");
+		if (!root) {
+			root = this.contentEl.createDiv({ cls: "deep-notes-container-root" });
+		}
+		root.empty();
+		root.addClass("deep-notes-container");
+		const container = root;
 
 		const file = this.app.workspace.getActiveFile();
 		const noteName = file ? file.basename : "No active note";
@@ -693,7 +716,11 @@ ${noteContent}`;
 			this.evaluationResult = null;
 			this.currentResponses = [];
 			this.viewMode = "questions";
-			clearAllHighlights(this.app);
+			if (this.lastNotePath) {
+				clearAllHighlights(this.app, this.lastNotePath);
+			} else {
+				clearAllHighlights(this.app);
+			}
 			this.render();
 			new Notice("Session cleared.");
 		});

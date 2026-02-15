@@ -235,34 +235,59 @@ export function findExcerptInText(docText: string, excerpt: string) {
  * When called from the sidebar, getActiveViewOfType(MarkdownView) returns null
  * because the sidebar is the active leaf. So we search all markdown leaves.
  */
-function findMarkdownView(app: App): MarkdownView | null {
+function findMarkdownView(app: App, filePath?: string): MarkdownView | null {
     // Fast path: active leaf IS a markdown view
     const active = app.workspace.getActiveViewOfType(MarkdownView);
-    if (active) return active;
-
-    // Sidebar is active — find the markdown leaf for the current file
-    const file = app.workspace.getActiveFile();
-    if (!file) return null;
-
-    for (const leaf of app.workspace.getLeavesOfType('markdown')) {
-        const view = leaf.view as MarkdownView;
-        if (view.file?.path === file.path) return view;
+    if (active) {
+        if (!filePath || active.file?.path === filePath) {
+            return active;
+        }
     }
 
-    // Last resort: any open markdown leaf
+    // Determine target path
+    const targetPath = filePath || app.workspace.getActiveFile()?.path;
+    if (!targetPath) {
+        console.log("[DeepNotes] No target path to find MarkdownView for");
+        return null;
+    }
+
+    // console.log("[DeepNotes] Searching for MarkdownView for file:", targetPath);
     const leaves = app.workspace.getLeavesOfType('markdown');
-    return leaves.length > 0 ? (leaves[0].view as MarkdownView) : null;
+    for (const leaf of leaves) {
+        const view = leaf.view as MarkdownView;
+        if (view.file?.path === targetPath) {
+            // console.log("[DeepNotes] Found matching MarkdownView leaf");
+            return view;
+        }
+    }
+
+    // Last resort: if no path specified, use any open markdown leaf (unlikely to be correct if we have a path)
+    if (!filePath && leaves.length > 0) {
+        // console.log("[DeepNotes] Fallback to first available MarkdownView");
+        return leaves[0].view as MarkdownView;
+    }
+
+    console.log(`[DeepNotes] No MarkdownView found for ${targetPath}`);
+    return null;
 }
 
 export function applyHighlights(
     app: App,
-    excerpts: { text: string; colorIndex: number }[]
+    excerpts: { text: string; colorIndex: number }[],
+    filePath?: string
 ): void {
-    const mdView = findMarkdownView(app);
-    if (!mdView) return;
+    console.log(`[DeepNotes] Applying ${excerpts.length} highlights to ${filePath || "active file"}...`);
+    const mdView = findMarkdownView(app, filePath);
+    if (!mdView) {
+        console.log("[DeepNotes] Abort: No MarkdownView found");
+        return;
+    }
 
     const editor = mdView.editor as any;
-    if (!editor.cm) return;
+    if (!editor.cm) {
+        console.log("[DeepNotes] Abort: No CM instance found on editor");
+        return;
+    }
 
     const cm = editor.cm as EditorView;
 
@@ -271,10 +296,10 @@ export function applyHighlights(
     });
 }
 
-export function clearAllHighlights(app?: App): void {
+export function clearAllHighlights(app?: App, filePath?: string): void {
     if (!app) return;
 
-    const mdView = findMarkdownView(app);
+    const mdView = findMarkdownView(app, filePath);
     if (!mdView) return;
 
     const editor = mdView.editor as any;

@@ -80,24 +80,33 @@ ollama list
 	- Set model to one from `ollama list` (recommended: `llama3.2:latest`)
 2. Use the plugin normally; no API key is required for Ollama.
 
-## OCR for Images in Notes
+## Image Analysis (OCR & Vision)
 
-If your note references screenshots or photos with text, Deep Notes can OCR those images and include the extracted text in generation.
+Deep Notes can analyze images referenced in your notes (screenshots, diagrams, etc.) to extract text and context for question generation. You can use either a local model (Ollama) or a cloud model (Gemini).
 
-1. Pull a vision model in Ollama:
+### Option A: Local Vision (Ollama)
 
-```bash
-ollama pull llava:latest
-```
-
+1. Pull a vision model:
+   ```bash
+   ollama pull llava:latest
+   ```
 2. In **Settings > Deep Notes**:
-	- Enable **Image OCR**
-	- Set **Vision model** to `llava:latest` (or another local vision model)
-	- Set **Max images per note** (recommended: 3)
+   - Set **Vision Provider** to **Ollama**
+   - Set **Vision Model** to `llava:latest`
 
-3. Keep the referenced images in your vault and embed them in markdown (for example `![[image.png]]` or `![](path/to/image.png)`).
+### Option B: Cloud Vision (Google Gemini)
 
-When generation runs, OCR text is appended to the note context under `Text Extracted from Referenced Images`.
+1. Get a Gemini API Key from Google AI Studio.
+2. In **Settings > Deep Notes**:
+   - Set **Vision Provider** to **Gemini**
+   - Enter your **Gemini API Key**
+   - The plugin uses `gemini-2.0-flash` by default for fast, accurate image analysis.
+
+3. **Usage:**
+   - Embed images in your note (e.g., `![[image.png]]`).
+   - Open Deep Notes view.
+   - Click **Scan Images**.
+   - The AI will analyze the images and generate questions based on the visual content.
 
 ### Ollama implementation notes
 
