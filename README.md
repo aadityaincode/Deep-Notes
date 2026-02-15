@@ -1,4 +1,4 @@
-# Deep Notes
+# Deep Notes (CalgaryHacks 2026)
 
 Deep Notes is an Obsidian plugin designed to act as a Socratic tutor for your notes. Instead of passively reading or summarizing, it challenges you to actively recall information, connect concepts across your vault, and deepen your understanding through recursive questioning.
 
