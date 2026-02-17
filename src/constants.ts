@@ -1,24 +1,18 @@
 export const VIEW_TYPE_DEEP_NOTES = "deep-notes-view";
 
-export type AIProvider = "openai" | "anthropic" | "gemini" | "ollama";
+export type AIProvider = "gemini" | "ollama";
 
 export const PROVIDERS: { value: AIProvider; label: string }[] = [
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
   { value: "gemini", label: "Google Gemini" },
   { value: "ollama", label: "Ollama (Local)" },
 ];
 
 export const MODELS_BY_PROVIDER: Record<AIProvider, string[]> = {
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
-  anthropic: ["claude-sonnet-4-5-20250929", "claude-haiku-4-5-20251001", "claude-3-5-sonnet-20241022"],
   gemini: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"],
   ollama: ["llama3.2:latest", "llava:latest", "llama3.2:3b", "qwen2.5:3b", "mistral:7b"],
 };
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<AIProvider, string> = {
-  openai: "gpt-4o-mini",
-  anthropic: "claude-sonnet-4-5-20250929",
   gemini: "gemini-2.0-flash",
   ollama: "llama3.2:latest",
 };
@@ -93,11 +87,10 @@ Example:
 
 // Returns the appropriate system prompt for the selected AI provider
 export function getSystemPrompt(provider: string): string {
+  // Only Ollama needs special instructions, Gemini uses default
   if (provider === "ollama") {
-    // Ollama models need explicit instructions for verbatim quoting
     return `${DEFAULT_SYSTEM_PROMPT}\n\nIMPORTANT: For 'source_excerpt', always copy the exact phrase from the note, without paraphrasing or summarizing. If unsure, quote the full sentence. Do not invent or reword the excerpt. If you cannot find a relevant excerpt, return the full sentence or paragraph from the note.`;
   }
-  // Default prompt for other providers
   return DEFAULT_SYSTEM_PROMPT;
 }
 

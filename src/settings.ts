@@ -10,10 +10,9 @@ import type { EmbeddingProvider } from "./embeddings";
 import type { QASession } from "./history";
 import type DeepNotesPlugin from "./main";
 
+
 export interface DeepNotesSettings {
 	provider: AIProvider;
-	apiKey: string;
-	anthropicApiKey: string;
 	geminiApiKey: string;
 	ollamaBaseUrl: string;
 	model: string;
@@ -29,13 +28,12 @@ export interface DeepNotesSettings {
 	history: QASession[];
 }
 
+
 export const DEFAULT_SETTINGS: DeepNotesSettings = {
-	provider: "openai",
-	apiKey: "",
-	anthropicApiKey: "",
+	provider: "gemini",
 	geminiApiKey: "",
 	ollamaBaseUrl: "http://127.0.0.1:11434",
-	model: "gpt-4o-mini",
+	model: "gemini-2.0-flash",
 	imageOcrEnabled: false,
 	imageOcrProvider: "ollama",
 	imageOcrVisionModel: "llava:latest",
@@ -63,81 +61,59 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		containerEl.createEl("h2", { text: "Deep Notes Settings" });
 
 		// --- AI Provider ---
-		new Setting(containerEl)
-			.setName("AI Provider")
-			.setDesc("Choose which AI provider to use for generation.")
-			.addDropdown((dropdown) => {
-				for (const p of PROVIDERS) {
-					dropdown.addOption(p.value, p.label);
-				}
-				dropdown
-					.setValue(this.plugin.settings.provider)
-					.onChange(async (value) => {
-						const provider = value as AIProvider;
-						this.plugin.settings.provider = provider;
-						this.plugin.settings.model =
-							DEFAULT_MODEL_BY_PROVIDER[provider];
-						await this.plugin.saveSettings();
-						this.display();
-					});
-			});
+		   new Setting(containerEl)
+			   .setName("AI Provider")
+			   .setDesc("Choose which AI provider to use for generation.")
+			   .addDropdown((dropdown) => {
+				   for (const p of PROVIDERS) {
+					   dropdown.addOption(p.value, p.label);
+				   }
+				   dropdown
+					   .setValue(this.plugin.settings.provider)
+					   .onChange(async (value) => {
+						   const provider = value as AIProvider;
+						   this.plugin.settings.provider = provider;
+						   this.plugin.settings.model =
+							   DEFAULT_MODEL_BY_PROVIDER[provider];
+						   await this.plugin.saveSettings();
+						   this.display();
+					   });
+			   });
 
 		// API key for current provider
-		const provider = this.plugin.settings.provider;
-		const keyInfo = {
-			openai: {
-				name: "OpenAI API Key",
-				desc: "Your OpenAI API key (sk-...)",
-				placeholder: "sk-...",
-				field: "apiKey" as const,
-			},
-			anthropic: {
-				name: "Anthropic API Key",
-				desc: "Your Anthropic API key (sk-ant-...)",
-				placeholder: "sk-ant-...",
-				field: "anthropicApiKey" as const,
-			},
-			gemini: {
-				name: "Google Gemini API Key",
-				desc: "Your Google AI / Gemini API key",
-				placeholder: "AI...",
-				field: "geminiApiKey" as const,
-			},
-		};
+		   const provider = this.plugin.settings.provider;
+		   if (provider === "gemini") {
+			   new Setting(containerEl)
+				   .setName("Google Gemini API Key")
+				   .setDesc("Your Google AI / Gemini API key")
+				   .addText((text) =>
+					   text
+						   .setPlaceholder("AI...")
+						   .setValue(this.plugin.settings.geminiApiKey)
+						   .then((t) => (t.inputEl.type = "password"))
+						   .onChange(async (value) => {
+							   this.plugin.settings.geminiApiKey = value.trim();
+							   await this.plugin.saveSettings();
+						   })
+				   );
+		   } else if (provider === "ollama") {
+			   new Setting(containerEl)
+				   .setName("Ollama")
+				   .setDesc("Runs locally and does not require an API key.");
 
-		if (provider !== "ollama") {
-			const providerKeyInfo = keyInfo[provider];
-			new Setting(containerEl)
-				.setName(providerKeyInfo.name)
-				.setDesc(providerKeyInfo.desc)
-				.addText((text) =>
-					text
-						.setPlaceholder(providerKeyInfo.placeholder)
-						.setValue(this.plugin.settings[providerKeyInfo.field])
-						.then((t) => (t.inputEl.type = "password"))
-						.onChange(async (value) => {
-							this.plugin.settings[providerKeyInfo.field] = value.trim();
-							await this.plugin.saveSettings();
-						})
-				);
-		} else {
-			new Setting(containerEl)
-				.setName("Ollama")
-				.setDesc("Runs locally and does not require an API key.");
-
-			new Setting(containerEl)
-				.setName("Ollama Base URL")
-				.setDesc("Local Ollama server URL.")
-				.addText((text) =>
-					text
-						.setPlaceholder("http://127.0.0.1:11434")
-						.setValue(this.plugin.settings.ollamaBaseUrl)
-						.onChange(async (value) => {
-							this.plugin.settings.ollamaBaseUrl = value.trim() || "http://127.0.0.1:11434";
-							await this.plugin.saveSettings();
-						})
-				);
-		}
+			   new Setting(containerEl)
+				   .setName("Ollama Base URL")
+				   .setDesc("Local Ollama server URL.")
+				   .addText((text) =>
+					   text
+						   .setPlaceholder("http://127.0.0.1:11434")
+						   .setValue(this.plugin.settings.ollamaBaseUrl)
+						   .onChange(async (value) => {
+							   this.plugin.settings.ollamaBaseUrl = value.trim() || "http://127.0.0.1:11434";
+							   await this.plugin.saveSettings();
+						   })
+				   );
+		   }
 
 		// Model dropdown (filtered by provider)
 		const models = MODELS_BY_PROVIDER[provider];
@@ -156,23 +132,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 					});
 			});
 
-		// System prompt
-		new Setting(containerEl)
-			.setName("System Prompt")
-			.setDesc("Instructions sent to the AI for generating questions.")
-			.addTextArea((text) =>
-				text
-					.setPlaceholder("Enter system prompt...")
-					.setValue(this.plugin.settings.systemPrompt)
-					.then((t) => {
-						t.inputEl.rows = 10;
-						t.inputEl.cols = 50;
-					})
-					.onChange(async (value) => {
-						this.plugin.settings.systemPrompt = value;
-						await this.plugin.saveSettings();
-					})
-			);
+		   // System prompt is now hidden from the settings UI for simplicity and safety.
 
 		containerEl.createEl("h2", { text: "Image Scanning" });
 
