@@ -28,6 +28,7 @@ export interface EvaluationResult {
 	summary: string;
 }
 
+// Generates Deep Notes questions using the selected AI provider
 export async function generateDeepNotesQuestions(
 	noteContent: string,
 	settings: DeepNotesSettings,
@@ -37,6 +38,7 @@ export async function generateDeepNotesQuestions(
 ): Promise<DeepNotesItem[]> {
 	let userMessage = noteContent;
 
+	// Add related context to the user message if available
 	if (relatedContext && relatedContext.length > 0) {
 		const contextBlock = relatedContext
 			.map((r) => `- From "${r.noteTitle}" (${r.heading}): ${r.text}`)
@@ -51,6 +53,7 @@ export async function generateDeepNotesQuestions(
 	const model = settings.model;
 	const ollamaBaseUrl = settings.ollamaBaseUrl;
 
+	// Call the appropriate AI provider
 	switch (provider) {
 		case "openai":
 			content = await callOpenAI(userMessage, apiKey, model, systemPrompt, imgs);
@@ -85,6 +88,7 @@ export async function generateDeepNotesQuestions(
 	return items;
 }
 
+// Calls Ollama's local LLM API to generate content
 async function callOllama(
 	noteContent: string,
 	model: string,
