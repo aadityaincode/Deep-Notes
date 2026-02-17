@@ -1,8 +1,4 @@
-<div align="center">
-
 # Deep Notes
-
-</div>
 
 <p align="center">
   <img src="./assets/logo.png" alt="Deep Notes Logo" width="320"/>
@@ -10,7 +6,7 @@
 
 [![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/buhariE/Deep-Notes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![PayPal Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/aadityadh)
+
 <!-- Add more badges as needed -->
 
 Deep Notes is a professional, production-ready Obsidian plugin designed to act as a Socratic tutor for your notes. It helps you actively recall information, connect concepts across your vault, and deepen your understanding through recursive questioning. Built for long-term use and ongoing support, Deep Notes transforms note-taking from a collection mechanic into a learning mechanic.
@@ -77,6 +73,37 @@ Go to **Settings > Deep Notes** to configure your AI provider and other options.
 
 ---
 
+## Configuration: Setting Up API Keys
+
+To use Deep Notes with cloud AI providers (Gemini, OpenAI, Anthropic), you must provide your own API keys:
+
+1. Open Obsidian Settings > Deep Notes.
+2. Select your preferred AI provider (Gemini, OpenAI, Anthropic, or Ollama).
+3. For Gemini, OpenAI, or Anthropic:
+   - Enter your API key in the corresponding field.
+   - You can obtain API keys from your provider's developer portal:
+     - [Google Gemini](https://aistudio.google.com/app/apikey)
+     - [OpenAI](https://platform.openai.com/account/api-keys)
+     - [Anthropic](https://console.anthropic.com/settings/keys)
+4. For Ollama (local), no API key is required, but you must have Ollama running on your machine.
+
+Your API keys are stored securely in your local Obsidian configuration and are never shared.
+
+---
+
+## Using Ollama (Local LLM)
+
+To use Deep Notes with Ollama (local AI models):
+
+1. Download and install Ollama from the official website: [https://ollama.com/](https://ollama.com/)
+2. Start Ollama by running `ollama serve` in your terminal.
+3. In Obsidian, go to Settings > Deep Notes and select "Ollama (Local)" as your provider.
+4. Optionally, pull specific models (e.g., `ollama pull llama3.2:latest`) as needed.
+
+No API key is required for Ollama. All processing happens locally on your machine.
+
+---
+
 ## Usage
 
 1. Open any note in Obsidian.
@@ -111,11 +138,17 @@ If you encounter issues, need help, or want to provide feedback, please open an 
 - Aaditya Dhungana — aadityaincode@gmail.com
 - Emmanuel Buhari — manuelbuhari@gmail.com
 - Noah Hong Anh Khoa — noahnghgwork@gmail.com
-- Toby Allan — toby.allan@ucalgary.ca
+- Toby Allan — tobyallan00@gmail.com
 - Muhammad Zohaib Talat — zohaibtalat@gmail.com
 
 ## Buy Us a Coffee
 
 If you enjoy Deep Notes and want to support further development, you can buy us a coffee!
 
-[Donate via PayPal](https://paypal.me/aadityadh)
+
+<p align="center">
+  <a href="https://paypal.me/aadityadh">
+    <img src="https://img.shields.io/badge/PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white" alt="PayPal" />
+  </a>
+</p>
+
