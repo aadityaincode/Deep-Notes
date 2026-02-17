@@ -48,26 +48,23 @@ export async function generateDeepNotesQuestions(
 
 	const imgs = images && images.length > 0 ? images : undefined;
 	let content: string;
-	const provider = settings.provider;
-	const apiKey = provider === "gemini" ? settings.geminiApiKey : (provider === "anthropic" ? settings.anthropicApiKey : settings.apiKey);
-	const model = settings.model;
-	const ollamaBaseUrl = settings.ollamaBaseUrl;
+	       const provider = settings.provider;
+	       const model = settings.model;
+	       const ollamaBaseUrl = settings.ollamaBaseUrl;
+	       let apiKey = "";
+	       if (provider === "gemini") {
+		       apiKey = settings.geminiApiKey;
+	       }
 
-	// Call the appropriate AI provider
-	switch (provider) {
-		case "openai":
-			content = await callOpenAI(userMessage, apiKey, model, systemPrompt, imgs);
-			break;
-		case "anthropic":
-			content = await callAnthropic(userMessage, apiKey, model, systemPrompt, imgs);
-			break;
-		case "gemini":
-			content = await callGemini(userMessage, apiKey, model, systemPrompt, imgs);
-			break;
-		case "ollama":
-			content = await callOllama(userMessage, model, systemPrompt, ollamaBaseUrl, imgs);
-			break;
-	}
+	       // Call the appropriate AI provider
+	       switch (provider) {
+		       case "gemini":
+			       content = await callGemini(userMessage, apiKey, model, systemPrompt, imgs);
+			       break;
+		       case "ollama":
+			       content = await callOllama(userMessage, model, systemPrompt, ollamaBaseUrl, imgs);
+			       break;
+	       }
 
 	const items = parseResponse(content);
 
@@ -533,26 +530,7 @@ async function callGemini(
 	return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
-async function callProvider(
-	userMessage: string,
-	provider: AIProvider,
-	apiKey: string,
-	model: string,
-	systemPrompt: string,
-	ollamaBaseUrl?: string,
-	images?: ImagePayload[]
-): Promise<string> {
-	switch (provider) {
-		case "openai":
-			return callOpenAI(userMessage, apiKey, model, systemPrompt, images);
-		case "anthropic":
-			return callAnthropic(userMessage, apiKey, model, systemPrompt, images);
-		case "gemini":
-			return callGemini(userMessage, apiKey, model, systemPrompt, images);
-		case "ollama":
-			return callOllama(userMessage, model, systemPrompt, ollamaBaseUrl, images);
-	}
-}
+
 
 export async function evaluateResponses(
 	noteContent: string,
@@ -677,22 +655,26 @@ Example:
 ]
 `;
 
-	const provider = settings.provider;
-	const apiKey = provider === "gemini" ? settings.geminiApiKey : (provider === "anthropic" ? settings.anthropicApiKey : settings.apiKey);
-	const model = settings.model;
-	const ollamaBaseUrl = settings.ollamaBaseUrl;
 
-	let content = "";
-	// We can reuse the internal callProvider logic by duplicating the switch or using the existing unexported function if available.
-	// Since I am editing ai.ts, I can use the existing callProvider function if it is in scope.
-	// It is defined at line 528.
+	       const provider = settings.provider;
+	       const model = settings.model;
+	       const ollamaBaseUrl = settings.ollamaBaseUrl;
+	       let apiKey = "";
+	       if (provider === "gemini") {
+		       apiKey = settings.geminiApiKey;
+	       }
 
-	try {
-		content = await callProvider(prompt, provider, apiKey, model, systemPrompt, ollamaBaseUrl); // systemPrompt here acts as system instruction for the chat
-	} catch (e) {
-		console.error("Deep Notes: Failed to generate sub-questions", e);
-		return [];
-	}
+	       let content = "";
+	       try {
+		       if (provider === "gemini") {
+			       content = await callGemini(prompt, apiKey, model, systemPrompt);
+		       } else if (provider === "ollama") {
+			       content = await callOllama(prompt, model, systemPrompt, ollamaBaseUrl);
+		       }
+	       } catch (e) {
+		       console.error("Deep Notes: Failed to generate sub-questions", e);
+		       return [];
+	       }
 
 	const items = parseResponse(content);
 
