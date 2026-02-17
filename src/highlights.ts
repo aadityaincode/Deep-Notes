@@ -2,8 +2,7 @@ import { App, MarkdownView } from "obsidian";
 import { StateField, StateEffect } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView } from "@codemirror/view";
 
-// --- Color Palette ---
-
+// Color palette for highlights used in the editor
 export const HIGHLIGHT_COLORS = [
     { bg: "rgba(255, 107, 107, 0.35)", border: "#ff6b6b", name: "red" },
     { bg: "rgba(78, 205, 196, 0.35)", border: "#4ecdc4", name: "teal" },
@@ -15,24 +14,22 @@ export const HIGHLIGHT_COLORS = [
     { bg: "rgba(255, 165, 2, 0.35)", border: "#ffa502", name: "orange" },
 ];
 
-/**
- * Data structure for a highlighted item passed from the view.
- */
+// Structure for a highlighted item
 interface HighlightData {
     text: string;
     colorIndex: number;
 }
 
-// --- CM6 State Field & Effect ---
-
-// Effect to set the current list of highlights
+// State effect to update highlights in the editor
 export const setHighlightsEffect = StateEffect.define<HighlightData[]>();
 
+// State for highlights, including decorations and items
 interface HighlightState {
     decorations: DecorationSet;
     items: HighlightData[];
 }
 
+// StateField for managing highlights in the editor
 export const deepNotesHighlightField = StateField.define<HighlightState>({
     create() {
         return { decorations: Decoration.none, items: [] };

@@ -23,6 +23,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AIProvider, string> = {
   ollama: "llama3.2:latest",
 };
 
+// Default system prompt for generating Deep Notes items
 export const DEFAULT_SYSTEM_PROMPT = `
 You are a Socratic tutor designed to help users deepen their understanding of their notes.
 Your goal is to generate exactly 6 items based on the user's note and any provided related context.
@@ -89,5 +90,15 @@ Example:
   }
 ]
 `;
+
+// Returns the appropriate system prompt for the selected AI provider
+export function getSystemPrompt(provider: string): string {
+  if (provider === "ollama") {
+    // Ollama models need explicit instructions for verbatim quoting
+    return `${DEFAULT_SYSTEM_PROMPT}\n\nIMPORTANT: For 'source_excerpt', always copy the exact phrase from the note, without paraphrasing or summarizing. If unsure, quote the full sentence. Do not invent or reword the excerpt. If you cannot find a relevant excerpt, return the full sentence or paragraph from the note.`;
+  }
+  // Default prompt for other providers
+  return DEFAULT_SYSTEM_PROMPT;
+}
 
 
