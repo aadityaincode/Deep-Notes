@@ -786,3 +786,46 @@
 	transform: none; /* Disable lift effect for sub-cards to avoid clutter */
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
+
+/* ── Utility classes to replace inline styles ── */
+
+.deep-notes-sub-card-indent {
+	margin-left: 20px;
+	width: calc(100% - 20px);
+}
+
+.deep-notes-card-bordered {
+	border-left: 4px solid var(--card-border-color, #3d352d);
+}
+
+.deep-notes-clear-session-btn {
+	margin-bottom: 8px;
+	font-size: 12px;
+	padding: 4px;
+}
+
+.deep-notes-btn-row-bottom {
+	margin-top: 16px;
+}
+
+.deep-notes-deeper-btn {
+	margin-left: 8px;
+}
+
+.deep-notes-locate-btn-colored {
+	background-color: var(--locate-bg, transparent);
+	border-color: var(--locate-border, rgba(200, 162, 78, 0.3));
+}
+
+/* Settings warning text (replaces inline style.color, style.marginBottom, style.fontSize) */
+.deep-notes-setting-warning-text {
+	color: var(--text-error);
+	margin-bottom: 10px;
+	font-size: 0.9em;
+}
+
+.deep-notes-picker-count {
+	font-size: 12px;
+	color: #9a8e7f;
+	text-align: center;
+}

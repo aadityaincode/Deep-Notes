@@ -48,7 +48,7 @@ export class VaultVectorStore {
         await this.removeNote(file.path);
 
         const chunks = chunkNote(content, file.path);
-        console.log(`[DeepNotes] Chunked ${file.path} into ${chunks.length} chunks`);
+        console.debug(`[DeepNotes] Chunked ${file.path} into ${chunks.length} chunks`);
 
         for (const chunk of chunks) {
             const vector = await embedFn(chunk.text);
@@ -56,7 +56,7 @@ export class VaultVectorStore {
                 console.warn(`[DeepNotes] Empty vector for chunk in ${file.path}`);
                 continue;
             }
-            console.log(`[DeepNotes] Inserting chunk ${chunk.chunkIndex} (vector dim: ${vector.length})`);
+            console.debug(`[DeepNotes] Inserting chunk ${chunk.chunkIndex} (vector dim: ${vector.length})`);
             await this.index.insertItem({
                 vector,
                 metadata: {

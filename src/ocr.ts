@@ -1,4 +1,4 @@
-import { App, normalizePath, TFile } from "obsidian";
+import { App, normalizePath, TFile, requestUrl } from "obsidian";
 
 export interface OCRSettings {
 	enabled: boolean;
@@ -198,7 +198,7 @@ function resolveImageFile(app: App, sourcePath: string, rawLink: string): TFile 
 	let target: TFile | null = null;
 	for (const candidate of candidateLinks) {
 		const resolved = app.metadataCache.getFirstLinkpathDest(candidate, sourcePath);
-		if (resolved && resolved instanceof TFile) {
+		if (resolved instanceof TFile) {
 			target = resolved;
 			break;
 		}
@@ -209,7 +209,7 @@ function resolveImageFile(app: App, sourcePath: string, rawLink: string): TFile 
 		for (const candidate of candidateLinks) {
 			const maybeRelative = normalizePath(sourceDir ? `${sourceDir}/${candidate}` : candidate);
 			const abs = app.vault.getAbstractFileByPath(maybeRelative);
-			if (abs && abs instanceof TFile) {
+			if (abs instanceof TFile) {
 				target = abs;
 				break;
 			}
@@ -279,22 +279,22 @@ export async function resolveExcalidrawEmbeddedImages(
 	excalidrawPath: string
 ): Promise<ImagePayload[]> {
 	const file = app.vault.getAbstractFileByPath(excalidrawPath);
-	if (!file || !(file instanceof TFile)) return [];
+	if (!(file instanceof TFile)) return [];
 
 	try {
 		const content = await app.vault.read(file);
 		const embeddedLinks = extractExcalidrawEmbeddedImageLinks(content);
 		if (embeddedLinks.length === 0) {
-			console.log(`[Deep Notes] No embedded images in ${excalidrawPath}`);
+			console.debug(`[Deep Notes] No embedded images in ${excalidrawPath}`);
 			return [];
 		}
 
-		console.log(`[Deep Notes] Found ${embeddedLinks.length} embedded image(s) in ${excalidrawPath}: ${embeddedLinks.join(", ")}`);
+		console.debug(`[Deep Notes] Found ${embeddedLinks.length} embedded image(s) in ${excalidrawPath}: ${embeddedLinks.join(", ")}`);
 
 		const results: ImagePayload[] = [];
 		for (const link of embeddedLinks) {
 			const resolved = app.metadataCache.getFirstLinkpathDest(link, excalidrawPath);
-			if (!resolved || !(resolved instanceof TFile)) {
+			if (!(resolved instanceof TFile)) {
 				console.warn(`[Deep Notes] Could not resolve embedded image: ${link}`);
 				continue;
 			}
@@ -306,7 +306,7 @@ export async function resolveExcalidrawEmbeddedImages(
 
 			try {
 				const { base64, bytes } = await readImageAsBase64(app, resolved);
-				console.log(`[Deep Notes] Loaded embedded image: ${resolved.path} (${bytes} bytes)`);
+				console.debug(`[Deep Notes] Loaded embedded image: ${resolved.path} (${bytes} bytes)`);
 				results.push({
 					base64,
 					mimeType: extensionToMime(ext),
@@ -334,7 +334,7 @@ export async function extractExcalidrawAnnotations(
 	excalidrawPath: string
 ): Promise<string> {
 	const file = app.vault.getAbstractFileByPath(excalidrawPath);
-	if (!file || !(file instanceof TFile)) return "";
+	if (!(file instanceof TFile)) return "";
 	return extractExcalidrawTextElements(app, file);
 }
 
@@ -403,7 +403,9 @@ export interface ExcalidrawContent {
 export async function renderExcalidrawAsPNG(
 	paths: string[]
 ): Promise<ImagePayload[]> {
-	const ea = (window as any).ExcalidrawAutomate?.getAPI?.();
+	const windowObj = window as Record<string, unknown>;
+	const excalidrawAutomate = windowObj.ExcalidrawAutomate as { getAPI?: () => Record<string, unknown> } | undefined;
+	const ea = excalidrawAutomate?.getAPI?.();
 	if (!ea) {
 		console.warn("[Deep Notes] Excalidraw plugin API not available. Install obsidian-excalidraw-plugin.");
 		return [];
@@ -412,17 +414,28 @@ export async function renderExcalidrawAsPNG(
 	const results: ImagePayload[] = [];
 	try {
 		// Create proper export settings and loader so embedded screenshots render
-		const exportSettings = ea.getExportSettings
-			? ea.getExportSettings(true, true) // withBackground=true, withTheme=true
+		const getExportSettings = ea.getExportSettings as ((withBg: boolean, withTheme: boolean) => Record<string, unknown>) | undefined;
+		const exportSettings = getExportSettings
+			? getExportSettings(true, true) // withBackground=true, withTheme=true
 			: { withBackground: true, withTheme: true, isMask: false };
-		const loader = ea.getEmbeddedFilesLoader
-			? ea.getEmbeddedFilesLoader(false) // isDark=false (light theme)
+		const getEmbeddedFilesLoader = ea.getEmbeddedFilesLoader as ((isDark: boolean) => unknown) | undefined;
+		const loader = getEmbeddedFilesLoader
+			? getEmbeddedFilesLoader(false) // isDark=false (light theme)
 			: null;
+
+		const createPNGBase64 = ea.createPNGBase64 as (
+			path: string,
+			scale: number,
+			settings: Record<string, unknown>,
+			loader: unknown,
+			theme: string,
+			padding: number
+		) => Promise<string>;
 
 		for (const p of paths) {
 			try {
-				console.log(`[Deep Notes] Rendering Excalidraw: ${p}`);
-				const dataUrl: string = await ea.createPNGBase64(
+				console.debug(`[Deep Notes] Rendering Excalidraw: ${p}`);
+				const dataUrl: string = await createPNGBase64(
 					p,              // vault-relative path
 					2,              // scale (2x for better quality)
 					exportSettings, // proper settings with background
@@ -440,7 +453,7 @@ export async function renderExcalidrawAsPNG(
 				const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
 				const bytes = Math.round(base64.length * 0.75);
 
-				console.log(`[Deep Notes] Rendered ${p}: ${bytes} bytes`);
+				console.debug(`[Deep Notes] Rendered ${p}: ${bytes} bytes`);
 
 				results.push({
 					base64,
@@ -453,7 +466,10 @@ export async function renderExcalidrawAsPNG(
 			}
 		}
 	} finally {
-		try { ea.destroy(); } catch { /* ignore */ }
+		try {
+			const destroy = ea.destroy as (() => void) | undefined;
+			destroy?.();
+		} catch { /* ignore */ }
 	}
 
 	return results;
@@ -466,7 +482,7 @@ export async function loadImagesByPaths(
 	const results: ImagePayload[] = [];
 	for (const p of paths) {
 		const file = app.vault.getAbstractFileByPath(p);
-		if (!file || !(file instanceof TFile)) continue;
+		if (!(file instanceof TFile)) continue;
 		try {
 			const { base64, bytes } = await readImageAsBase64(app, file);
 			results.push({
@@ -532,7 +548,8 @@ async function runOllamaVisionOCR(
 	baseUrl: string
 ): Promise<string> {
 	const normalizedBase = (baseUrl || "http://127.0.0.1:11434").replace(/\/$/, "");
-	const response = await fetch(`${normalizedBase}/api/chat`, {
+	const response = await requestUrl({
+		url: `${normalizedBase}/api/chat`,
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -551,16 +568,15 @@ async function runOllamaVisionOCR(
 		}),
 	});
 
-	if (!response.ok) {
-		const err = await response.text();
+	if (response.status !== 200) {
+		const err = response.text;
 		if (response.status === 404 && /not found/i.test(err)) {
 			throw new Error(`Vision model '${visionModel}' not found. Run: ollama pull ${visionModel}`);
 		}
 		throw new Error(`Ollama vision OCR error (${response.status}): ${err}`);
 	}
 
-	const data = await response.json();
-	return data.message?.content ?? "";
+	return response.json.message?.content ?? "";
 }
 
 async function runGeminiVisionOCR(
@@ -571,7 +587,8 @@ async function runGeminiVisionOCR(
 ): Promise<string> {
 	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-	const response = await fetch(url, {
+	const response = await requestUrl({
+		url,
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
@@ -597,11 +614,9 @@ async function runGeminiVisionOCR(
 		}),
 	});
 
-	if (!response.ok) {
-		const err = await response.text();
-		throw new Error(`Gemini Vision API error (${response.status}): ${err}`);
+	if (response.status !== 200) {
+		throw new Error(`Gemini Vision API error (${response.status}): ${response.text}`);
 	}
 
-	const data = await response.json();
-	return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+	return response.json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }

@@ -1,5 +1,6 @@
 import { ItemView, Notice, WorkspaceLeaf, TFile, debounce, setIcon } from "obsidian";
-import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT, AIProvider } from "./constants";
+import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT } from "./constants";
+import type { AIProvider } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult, generateDeepNotesSubQuestions } from "./ai";
 import { getEmbedding } from "./embeddings";
 import type { SearchResult } from "./vectorStore";
@@ -56,8 +57,8 @@ export class DeepNotesView extends ItemView {
 		this.registerEvent(
 			this.app.workspace.on(
 				"active-leaf-change",
-				debounce(async () => {
-					await this.handleActiveLeafChange();
+				debounce(() => {
+					void this.handleActiveLeafChange();
 				}, 200)
 			)
 		);
@@ -65,7 +66,7 @@ export class DeepNotesView extends ItemView {
 		await this.handleActiveLeafChange();
 	}
 
-	async onClose(): Promise<void> {
+	onClose(): Promise<void> {
 		this.saveCurrentStateToCache();
 		// If we are closing, we should clear highlights from the last known path
 		if (this.lastNotePath) {
@@ -74,6 +75,7 @@ export class DeepNotesView extends ItemView {
 			clearAllHighlights(this.app);
 		}
 		this.contentEl.empty();
+		return Promise.resolve();
 	}
 
 	private saveCurrentStateToCache(): void {
@@ -89,7 +91,7 @@ export class DeepNotesView extends ItemView {
 		}
 	}
 
-	private async handleActiveLeafChange(): Promise<void> {
+	private handleActiveLeafChange(): void {
 		const file = this.app.workspace.getActiveFile();
 		const newPath = file ? file.path : null;
 
@@ -151,12 +153,12 @@ export class DeepNotesView extends ItemView {
 	}
 
 	private getActiveKey(): string {
-		const { provider, apiKey, anthropicApiKey, geminiApiKey } = this.plugin.settings;
-		return { openai: apiKey, anthropic: anthropicApiKey, gemini: geminiApiKey, ollama: "" }[provider];
+		const { provider, geminiApiKey } = this.plugin.settings;
+		return provider === "gemini" ? geminiApiKey : "";
 	}
 
 	async triggerGeneration(): Promise<void> {
-		const { provider, model, systemPrompt, ollamaBaseUrl } = this.plugin.settings;
+		const { provider, systemPrompt } = this.plugin.settings;
 		const activeKey = this.getActiveKey();
 
 		if (provider !== "ollama" && !activeKey) {
@@ -173,8 +175,6 @@ export class DeepNotesView extends ItemView {
 		this.loading = true;
 		this.loadingMessage = "Generating questions from note...";
 		this.evaluationResult = null;
-		this.loadingMessage = "Generating questions from note...";
-		this.evaluationResult = null;
 		this.viewMode = "questions";
 		this.render();
 
@@ -183,10 +183,10 @@ export class DeepNotesView extends ItemView {
 
 			// Index just this note (fast), full vault indexing is done via command or on first use
 			await this.plugin.indexer.indexSingleNote(file);
-			let enrichedContent = content;
+			const enrichedContent = content;
 
 			// Search for related notes via vector store
-			let relatedContext = undefined;
+			let relatedContext: SearchResult[] | undefined = undefined;
 			try {
 				const stats = await this.plugin.vectorStore.getStats();
 				if (stats.totalChunks > 0) {
@@ -201,12 +201,12 @@ export class DeepNotesView extends ItemView {
 						this.app.vault.getMarkdownFiles().map((f) => f.path)
 					);
 					const validResults = results.filter((r) => existingFiles.has(r.filePath));
-					console.log(`[DeepNotes] Related context found: ${validResults.length} items`, validResults);
+					console.debug(`[DeepNotes] Related context found: ${validResults.length} items`, validResults);
 					if (validResults.length > 0) {
 						relatedContext = validResults;
 					}
 				} else {
-					console.log("[DeepNotes] Vector store stats empty, skipping cross-topic search");
+					console.debug("[DeepNotes] Vector store stats empty, skipping cross-topic search");
 				}
 			} catch (e) {
 				console.warn("Cross-topic search failed, generating without context:", e);
@@ -267,8 +267,8 @@ export class DeepNotesView extends ItemView {
 		const content = this.app.vault.getAbstractFileByPath(file.path);
 		if (!content) return;
 
-		// Read note content synchronously from cache if possible
-		this.app.vault.read(file).then((noteContent) => {
+		// Read note content asynchronously
+		void this.app.vault.read(file).then((noteContent) => {
 			this.availableImages = listEmbeddedImages(
 				this.app,
 				file,
@@ -296,7 +296,7 @@ export class DeepNotesView extends ItemView {
 			return;
 		}
 
-		const { provider, model, ollamaBaseUrl, imageOcrProvider, geminiApiKey, imageOcrVisionModel } = this.plugin.settings;
+		const { provider, imageOcrProvider, geminiApiKey, imageOcrVisionModel } = this.plugin.settings;
 		const activeKey = this.getActiveKey();
 
 		// Check keys based on usage
@@ -307,14 +307,11 @@ export class DeepNotesView extends ItemView {
 
 		// Check vision-specific key
 		if (imageOcrProvider === "gemini" && !geminiApiKey) {
-			new Notice("Gemini API Key is required for vision tasks.");
+			new Notice("Gemini API key is required for vision tasks.");
 			return;
 		}
 
 		this.showImagePicker = false;
-		this.loading = true;
-		this.loadingMessage = `Loading ${this.selectedImagePaths.size} image(s)...`;
-		this.evaluationResult = null;
 		this.loading = true;
 		this.loadingMessage = `Loading ${this.selectedImagePaths.size} image(s)...`;
 		this.evaluationResult = null;
@@ -345,8 +342,8 @@ export class DeepNotesView extends ItemView {
 				: [];
 
 			// For Excalidraw: extract the actual embedded screenshots + text annotations
-			let excalidrawImagePayloads: ImagePayload[] = [];
-			let excalidrawAnnotations: string[] = [];
+			const excalidrawImagePayloads: ImagePayload[] = [];
+			const excalidrawAnnotations: string[] = [];
 			if (excalidrawPaths.length > 0) {
 				this.loadingMessage = `Extracting images from ${excalidrawPaths.length} drawing(s)...`;
 				this.render();
@@ -377,12 +374,11 @@ export class DeepNotesView extends ItemView {
 			// Determine which model/provider to use for VISION
 			const visionProvider = imageOcrProvider === "gemini" ? "gemini" : "ollama";
 			const visionModelName = imageOcrProvider === "gemini" ? "gemini-2.0-flash" : (imageOcrVisionModel || "llava");
-			const visionApiKey = imageOcrProvider === "gemini" ? geminiApiKey : "";
 
 			this.loadingMessage = `Analyzing ${allImages.length} image(s) with ${visionModelName}...`;
 			this.render();
 
-			console.log(
+			console.debug(
 				`[Deep Notes] Sending ${allImages.length} image(s) to ${visionProvider}/${visionModelName}:\n` +
 				allImages.map((img, i) => `  [${i + 1}] ${img.path} (${img.mimeType}, ${img.bytes} bytes)`).join("\n")
 			);
@@ -392,7 +388,7 @@ export class DeepNotesView extends ItemView {
 				? `\n\nHand-drawn annotations from the Excalidraw drawings (these are labels/notes the student wrote on top of the images):\n${excalidrawAnnotations.join("\n\n")}`
 				: "";
 
-			let userText = `FOCUS ON THE IMAGES. Generate questions about what the image(s) show — the diagrams, formulas, calculations, and visual content.${annotationBlock}
+			const userText = `FOCUS ON THE IMAGES. Generate questions about what the image(s) show — the diagrams, formulas, calculations, and visual content.${annotationBlock}
 
 For background context only (do NOT generate questions about this text directly), here is the note this image belongs to:
 
@@ -403,8 +399,6 @@ ${noteContent}`;
 				...this.plugin.settings,
 				provider: visionProvider as AIProvider,
 				model: visionModelName,
-				// Ensure the correct key is available if it's generic, though ai.ts pulls from specific fields
-				// If visionProvider is 'gemini', ai.ts looks at settings.geminiApiKey, which is preserved in spread
 			};
 
 			this.items = await generateDeepNotesQuestions(
@@ -430,7 +424,7 @@ ${noteContent}`;
 	// renderOcrStatus removed — replaced by Scan Images button
 
 	private async triggerEvaluation(): Promise<void> {
-		const { provider, model, ollamaBaseUrl } = this.plugin.settings;
+		const { provider } = this.plugin.settings;
 		const activeKey = this.getActiveKey();
 
 		if (provider !== "ollama" && !activeKey) {
@@ -476,12 +470,9 @@ ${noteContent}`;
 				noteContent,
 				flatItems,
 				flatResponses,
-				this.plugin.settings,
-				model,
-				ollamaBaseUrl
+				this.plugin.settings
 			);
 
-			// Save session to history
 			// Save session to history
 			const session: QASession = {
 				id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -512,12 +503,7 @@ ${noteContent}`;
 		this.items = session.items;
 		this.evaluationResult = session.evaluation ?? null;
 		this.viewMode = session.evaluation ? "evaluation" : "questions";
-		// If session items don't have userResponse (old sessions), map from responses array if possible
-		// But simpler to just use what's in items. Old sessions might lose data if we rely solely on item.userResponse and it wasn't there.
-		// However, session.items from history should be whatever was saved.
-		// If old sessions were saved without userResponse in items, we need to map session.responses back to items.
 		if (session.responses && session.responses.length === this.items.length) {
-			// This assumes flat structure for old sessions, which is true.
 			for (let i = 0; i < this.items.length; i++) {
 				if (!this.items[i].userResponse) {
 					this.items[i].userResponse = session.responses[i];
@@ -601,7 +587,8 @@ ${noteContent}`;
 
 	private getDailyNoteSettings(): { folder: string; format: string } {
 		try {
-			const internalPlugins = (this.app as any).internalPlugins;
+			const internalPlugins = (this.app as unknown as Record<string, unknown>).internalPlugins as
+				{ getPluginById?: (id: string) => { instance?: { options?: { folder?: string; format?: string } } } } | undefined;
 			const dailyNotes = internalPlugins?.getPluginById?.("daily-notes");
 			if (dailyNotes?.instance?.options) {
 				return {
@@ -650,19 +637,19 @@ ${noteContent}`;
 
 		const reviewBlock = [
 			"",
-			`## Deep Notes Review: [[${noteName}]]`,
+			`## Deep Notes review: [[${noteName}]]`,
 			"",
 			`**Score:** ${this.evaluationResult.score}%`,
 			`**Summary:** ${this.evaluationResult.summary}`,
 			"",
-			"### Questions to Re-review",
+			"### Questions to re-review",
 			questions,
 			"",
 		].join("\n");
 
 		const existingFile = this.app.vault.getAbstractFileByPath(reviewFilePath);
-		if (existingFile) {
-			await this.app.vault.append(existingFile as TFile, reviewBlock);
+		if (existingFile instanceof TFile) {
+			await this.app.vault.append(existingFile, reviewBlock);
 		} else {
 			await this.ensureFolderExists(reviewsFolder);
 			await this.app.vault.create(reviewFilePath, reviewBlock.trimStart());
@@ -743,15 +730,17 @@ ${noteContent}`;
 			});
 			const genIcon = genBtn.createSpan({ cls: "deep-notes-btn-icon" });
 			setIcon(genIcon, "lightbulb");
-			genBtn.createSpan({ text: "Generate Questions" });
-			genBtn.addEventListener("click", () => this.triggerGeneration());
+			genBtn.createSpan({ text: "Generate questions" });
+			genBtn.addEventListener("click", () => {
+				void this.triggerGeneration();
+			});
 
 			const scanBtn = btnStack.createEl("button", {
 				cls: "deep-notes-generate-btn deep-notes-scan-btn deep-notes-icon-btn",
 			});
 			const scanIcon = scanBtn.createSpan({ cls: "deep-notes-btn-icon" });
 			setIcon(scanIcon, "scan-eye");
-			scanBtn.createSpan({ text: "Scan Images" });
+			scanBtn.createSpan({ text: "Scan images" });
 			scanBtn.addEventListener("click", () => this.openImagePicker());
 
 			const historyBtn = btnStack.createEl("button", {
@@ -769,15 +758,14 @@ ${noteContent}`;
 			this.renderFlowchartGuide(container);
 
 			// Show index status
-			this.renderIndexStatus(container);
+			void this.renderIndexStatus(container);
 			return;
 		}
 
 		// Clear Cache Button (Top Right)
 		const clearBtn = container.createEl("button", {
-			text: "Clear Session",
-			cls: "deep-notes-generate-btn deep-notes-history-btn",
-			attr: { style: "margin-bottom: 8px; font-size: 12px; padding: 4px;" }
+			text: "Clear session",
+			cls: "deep-notes-generate-btn deep-notes-history-btn deep-notes-clear-session-btn",
 		});
 		clearBtn.addEventListener("click", () => {
 			if (this.lastNotePath) {
@@ -797,24 +785,26 @@ ${noteContent}`;
 
 		// Evaluate button at top
 		const evalBtn = container.createEl("button", {
-			text: "Evaluate & Save Session",
+			text: "Evaluate & save session",
 			cls: "deep-notes-generate-btn deep-notes-evaluate-btn",
 		});
-		evalBtn.addEventListener("click", () => this.triggerEvaluation());
+		evalBtn.addEventListener("click", () => {
+			void this.triggerEvaluation();
+		});
 
-		// Render question/suggestion cards
 		// Render question/suggestion cards
 		this.renderQuestionList(this.items, container);
 
 		// Bottom buttons
-		const bottomRow = container.createDiv({ cls: "deep-notes-btn-row" });
-		bottomRow.style.marginTop = "16px";
+		const bottomRow = container.createDiv({ cls: "deep-notes-btn-row deep-notes-btn-row-bottom" });
 
 		const resetBtn = bottomRow.createEl("button", {
 			text: "Regenerate",
 			cls: "deep-notes-generate-btn",
 		});
-		resetBtn.addEventListener("click", () => this.triggerGeneration());
+		resetBtn.addEventListener("click", () => {
+			void this.triggerGeneration();
+		});
 
 		const histBtn = bottomRow.createEl("button", {
 			cls: "deep-notes-generate-btn deep-notes-history-btn deep-notes-icon-btn",
@@ -838,23 +828,25 @@ ${noteContent}`;
 	private renderQuestionCard(item: DeepNotesItem, container: HTMLElement, idx: number, depth: number, rootIndex: number): void {
 		const color = HIGHLIGHT_COLORS[rootIndex % HIGHLIGHT_COLORS.length];
 		// If depth > 0, make it slightly indented or distinct
-		const card = container.createDiv({ cls: depth > 0 ? "deep-notes-card deep-notes-sub-card" : "deep-notes-card" });
+		const card = container.createDiv({
+			cls: depth > 0
+				? "deep-notes-card deep-notes-sub-card deep-notes-sub-card-indent"
+				: "deep-notes-card"
+		});
 
-		if (depth > 0) {
-			card.style.marginLeft = "20px";
-			card.style.width = "calc(100% - 20px)";
-		}
-
-		// Color indicator bar
-		card.style.borderLeft = `4px solid ${color.border}`;
+		// Color indicator bar — use CSS custom properties instead of inline styles
+		card.setCssProps({
+			"--card-border-color": color.border,
+		});
+		card.addClass("deep-notes-card-bordered");
 
 		const headerRow = card.createDiv({ cls: "deep-notes-card-header" });
 
 		const badgeText =
 			item.type === "knowledge-expansion"
-				? "Knowledge Expansion"
+				? "Knowledge expansion"
 				: item.type === "cross-topic"
-					? "Cross-Topic"
+					? "Cross-topic"
 					: "Suggestion";
 		headerRow.createEl("span", {
 			text: badgeText,
@@ -867,9 +859,12 @@ ${noteContent}`;
 				cls: "deep-notes-locate-btn",
 				attr: { "aria-label": "Scroll to highlighted section" },
 			});
-			locateBtn.style.backgroundColor = color.bg;
-			locateBtn.style.borderColor = color.border;
-			locateBtn.innerHTML = "📍";
+			locateBtn.setCssProps({
+				"--locate-bg": color.bg,
+				"--locate-border": color.border,
+			});
+			locateBtn.addClass("deep-notes-locate-btn-colored");
+			locateBtn.textContent = "📍";
 			locateBtn.addEventListener("click", () => {
 				scrollToExcerpt(this.app, item.sourceExcerpt!);
 			});
@@ -884,12 +879,12 @@ ${noteContent}`;
 				cls: "deep-notes-source-link",
 				href: "#",
 			});
-			sourceLink.addEventListener("click", async (e) => {
+			sourceLink.addEventListener("click", (e) => {
 				e.preventDefault();
 				const files = this.app.vault.getMarkdownFiles();
 				const target = this.findNoteFile(item.sourceNote!, files);
 				if (target) {
-					await this.app.workspace.openLinkText(target.path, "");
+					void this.app.workspace.openLinkText(target.path, "");
 				} else {
 					new Notice(`Note "${item.sourceNote}" not found.`);
 				}
@@ -916,105 +911,21 @@ ${noteContent}`;
 		const btnRow = card.createDiv({ cls: "deep-notes-btn-row" });
 
 		const addBtn = btnRow.createEl("button", {
-			text: "Add to Note",
+			text: "Add to note",
 			cls: "deep-notes-add-btn deep-notes-generate-btn",
 		});
-		addBtn.addEventListener("click", async () => {
-			const response = textarea.value.trim();
-			if (!response) {
-				new Notice("Please type a response first.");
-				return;
-			}
-
-			const activeFile = this.app.workspace.getActiveFile();
-			if (!activeFile) {
-				new Notice("No active note.");
-				return;
-			}
-
-			const calloutType =
-				item.type === "knowledge-expansion" || item.type === "cross-topic"
-					? "question"
-					: "note";
-			const calloutTitle =
-				item.type === "cross-topic"
-					? "Cross-Topic Question"
-					: item.type === "knowledge-expansion"
-						? "Deep Notes Question"
-						: "Deep Notes Suggestion";
-			const calloutBlock = [
-				"",
-				`> [!${calloutType}] ${calloutTitle}`,
-				`> ${item.text}`,
-				`>`,
-				`> **Response:** ${response}`,
-				"",
-			].join("\n");
-
-			const fileContent = await this.app.vault.read(activeFile);
-			// Try to find where to insert
-			const range = item.sourceExcerpt ? findExcerptInText(fileContent, item.sourceExcerpt) : null;
-
-			if (range) {
-				// Insert right after the highlighted text
-				const insertIdx = range.to;
-				const newContent = fileContent.slice(0, insertIdx) + "\n" + calloutBlock + fileContent.slice(insertIdx);
-				await this.app.vault.modify(activeFile, newContent);
-			} else {
-				// Fallback: append to end
-				await this.app.vault.append(activeFile, calloutBlock);
-			}
-
-			new Notice("Added to note!");
-			textarea.value = "";
+		addBtn.addEventListener("click", () => {
+			void this.addResponseToNote(item, textarea);
 		});
 
 		// Go Deeper Button
 		const deeperBtn = btnRow.createEl("button", {
-			text: "Go Deeper",
-			cls: "deep-notes-add-btn deep-notes-generate-btn",
+			text: "Go deeper",
+			cls: "deep-notes-add-btn deep-notes-generate-btn deep-notes-deeper-btn",
 		});
-		deeperBtn.style.marginLeft = "8px";
 
-		deeperBtn.addEventListener("click", async () => {
-			const userResp = textarea.value.trim();
-			if (!userResp) {
-				new Notice("Please answer the question first to go deeper.");
-				return;
-			}
-
-			const file = this.app.workspace.getActiveFile();
-			if (!file) return;
-
-			deeperBtn.textContent = "Generating...";
-			deeperBtn.disabled = true;
-
-			try {
-				const noteContent = await this.app.vault.read(file);
-				const subQuestions = await generateDeepNotesSubQuestions(
-					item.text,
-					item.sampleAnswer,
-					userResp,
-					noteContent,
-					this.plugin.settings,
-					this.plugin.settings.systemPrompt
-				);
-
-				if (subQuestions.length > 0) {
-					// Initialize subItems if needed
-					if (!item.subItems) item.subItems = [];
-					item.subItems.push(...subQuestions);
-					this.saveCurrentStateToCache();
-					this.render();
-				} else {
-					new Notice("Could not generate a follow-up question.");
-				}
-			} catch (e) {
-				new Notice(`Error going deeper: ${e}`);
-			} finally {
-				deeperBtn.textContent = "Go Deeper";
-				deeperBtn.disabled = false;
-			}
+		deeperBtn.addEventListener("click", () => {
+			void this.goDeeper(item, textarea, deeperBtn);
 		});
 
 		// Recursively render sub-questions
@@ -1022,8 +933,97 @@ ${noteContent}`;
 			const subContainer = container.createDiv({ cls: "deep-notes-sub-questions" });
 			this.renderQuestionList(item.subItems, subContainer, depth + 1, rootIndex);
 		}
+	}
 
+	private async addResponseToNote(item: DeepNotesItem, textarea: HTMLTextAreaElement): Promise<void> {
+		const response = textarea.value.trim();
+		if (!response) {
+			new Notice("Please type a response first.");
+			return;
+		}
 
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile) {
+			new Notice("No active note.");
+			return;
+		}
+
+		const calloutType =
+			item.type === "knowledge-expansion" || item.type === "cross-topic"
+				? "question"
+				: "note";
+		const calloutTitle =
+			item.type === "cross-topic"
+				? "Cross-topic question"
+				: item.type === "knowledge-expansion"
+					? "Deep Notes question"
+					: "Deep Notes suggestion";
+		const calloutBlock = [
+			"",
+			`> [!${calloutType}] ${calloutTitle}`,
+			`> ${item.text}`,
+			`>`,
+			`> **Response:** ${response}`,
+			"",
+		].join("\n");
+
+		const fileContent = await this.app.vault.read(activeFile);
+		// Try to find where to insert
+		const range = item.sourceExcerpt ? findExcerptInText(fileContent, item.sourceExcerpt) : null;
+
+		if (range) {
+			// Insert right after the highlighted text
+			const insertIdx = range.to;
+			const newContent = fileContent.slice(0, insertIdx) + "\n" + calloutBlock + fileContent.slice(insertIdx);
+			await this.app.vault.modify(activeFile, newContent);
+		} else {
+			// Fallback: append to end
+			await this.app.vault.append(activeFile, calloutBlock);
+		}
+
+		new Notice("Added to note!");
+		textarea.value = "";
+	}
+
+	private async goDeeper(item: DeepNotesItem, textarea: HTMLTextAreaElement, deeperBtn: HTMLButtonElement): Promise<void> {
+		const userResp = textarea.value.trim();
+		if (!userResp) {
+			new Notice("Please answer the question first to go deeper.");
+			return;
+		}
+
+		const file = this.app.workspace.getActiveFile();
+		if (!file) return;
+
+		deeperBtn.textContent = "Generating...";
+		deeperBtn.disabled = true;
+
+		try {
+			const noteContent = await this.app.vault.read(file);
+			const subQuestions = await generateDeepNotesSubQuestions(
+				item.text,
+				item.sampleAnswer,
+				userResp,
+				noteContent,
+				this.plugin.settings,
+				this.plugin.settings.systemPrompt
+			);
+
+			if (subQuestions.length > 0) {
+				// Initialize subItems if needed
+				if (!item.subItems) item.subItems = [];
+				item.subItems.push(...subQuestions);
+				this.saveCurrentStateToCache();
+				this.render();
+			} else {
+				new Notice("Could not generate a follow-up question.");
+			}
+		} catch (e) {
+			new Notice(`Error going deeper: ${e}`);
+		} finally {
+			deeperBtn.textContent = "Go deeper";
+			deeperBtn.disabled = false;
+		}
 	}
 
 	private renderHistory(container: HTMLElement): void {
@@ -1059,7 +1059,7 @@ ${noteContent}`;
 		}
 
 		container.createEl("h5", {
-			text: `${sessions.length} Past Session${sessions.length > 1 ? "s" : ""}`,
+			text: `${sessions.length} past session${sessions.length > 1 ? "s" : ""}`,
 			cls: "deep-notes-history-title",
 		});
 
@@ -1109,10 +1109,11 @@ ${noteContent}`;
 				text: "Delete",
 				cls: "deep-notes-add-btn deep-notes-delete-btn",
 			});
-			delBtn.addEventListener("click", async () => {
-				await deleteSession(this.plugin, session.id);
-				new Notice("Session deleted.");
-				this.render();
+			delBtn.addEventListener("click", () => {
+				void deleteSession(this.plugin, session.id).then(() => {
+					new Notice("Session deleted.");
+					this.render();
+				});
 			});
 		}
 	}
@@ -1200,7 +1201,9 @@ ${noteContent}`;
 			cls: "deep-notes-generate-btn deep-notes-scan-selected-btn",
 		}) as HTMLButtonElement;
 		scanBtn.disabled = this.selectedImagePaths.size === 0;
-		scanBtn.addEventListener("click", () => this.triggerImageScan());
+		scanBtn.addEventListener("click", () => {
+			void this.triggerImageScan();
+		});
 
 		const cancelBtn = actions.createEl("button", {
 			text: "Cancel",
@@ -1258,11 +1261,11 @@ ${noteContent}`;
 					cls: "deep-notes-index-notice",
 				});
 				const indexBtn = statusDiv.createEl("button", {
-					text: "Index Vault Now",
+					text: "Index vault now",
 					cls: "deep-notes-generate-btn deep-notes-index-btn",
 				});
 				indexBtn.addEventListener("click", () => {
-					this.plugin.indexer.indexVault();
+					void this.plugin.indexer.indexVault();
 				});
 			} else {
 				statusDiv.createEl("p", {
@@ -1348,7 +1351,7 @@ ${noteContent}`;
 				const summary = details.createEl("summary");
 				const summaryIcon = summary.createSpan({ cls: "deep-notes-btn-icon" });
 				setIcon(summaryIcon, "message-circle");
-				summary.createSpan({ text: " Suggested Answer" });
+				summary.createSpan({ text: " Suggested answer" });
 				details.createEl("p", {
 					text: fb.suggestedAnswer,
 					cls: "deep-notes-suggested-answer-text",
@@ -1361,7 +1364,7 @@ ${noteContent}`;
 
 		// Schedule Review button
 		const scheduleBtn = btnStack.createEl("button", {
-			text: "Schedule Review",
+			text: "Schedule review",
 			cls: "deep-notes-generate-btn deep-notes-schedule-btn",
 		});
 		const reviewDate = this.getReviewDate(result.score);
@@ -1369,11 +1372,13 @@ ${noteContent}`;
 		scheduleBtn.createEl("small", {
 			text: ` (${dateStr})`,
 		});
-		scheduleBtn.addEventListener("click", () => this.scheduleReview());
+		scheduleBtn.addEventListener("click", () => {
+			void this.scheduleReview();
+		});
 
 		// Back button
 		const backBtn = btnStack.createEl("button", {
-			text: "Back to Questions",
+			text: "Back to questions",
 			cls: "deep-notes-generate-btn deep-notes-regenerate",
 		});
 		backBtn.addEventListener("click", () => {

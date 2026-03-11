@@ -20,7 +20,10 @@ export default class DeepNotesPlugin extends Plugin {
 
 		// Initialize vector store
 		const pluginDir = this.manifest.dir;
-		const vaultBasePath = (this.app.vault.adapter as any).basePath;
+		const adapter = this.app.vault.adapter;
+		const vaultBasePath = "getBasePath" in adapter
+			? (adapter as { getBasePath(): string }).getBasePath()
+			: "";
 		const fullPluginDir = `${vaultBasePath}/${pluginDir}`;
 		this.vectorStore = new VaultVectorStore(fullPluginDir);
 		await this.vectorStore.initialize();
@@ -33,14 +36,14 @@ export default class DeepNotesPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "open-deep-notes",
-			name: "Open Deep Notes",
+			id: "open-view",
+			name: "Open view",
 			callback: () => this.activateView(),
 		});
 
 		this.addCommand({
 			id: "check-similar-notes",
-			name: "Check Similar Notes for Current File (Debug)",
+			name: "Check similar notes for current file (debug)",
 			callback: async () => {
 				const file = this.app.workspace.getActiveFile();
 				if (!file) {
@@ -60,7 +63,7 @@ export default class DeepNotesPlugin extends Plugin {
 						return;
 					}
 
-					console.log(`[DeepNotes] Searching with embedding (dim: ${embedding.length})`);
+					console.debug(`[DeepNotes] Searching with embedding (dim: ${embedding.length})`);
 					const results = await this.vectorStore.search(embedding, 5, file.path);
 
 					if (results.length === 0) {
@@ -68,7 +71,7 @@ export default class DeepNotesPlugin extends Plugin {
 					} else {
 						const msg = results.map(r => `${r.noteTitle} (${(r.score).toFixed(4)})`).join("\n");
 						new Notice(`Top matches:\n${msg}`, 5000);
-						console.log("[DeepNotes] Similarity Results:", results);
+						console.debug("[DeepNotes] Similarity Results:", results);
 					}
 				} catch (e) {
 					new Notice(`Error checking similarity: ${e}`);
@@ -78,8 +81,8 @@ export default class DeepNotesPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "generate-deep-notes-questions",
-			name: "Generate Deep Notes Questions",
+			id: "generate-questions",
+			name: "Generate questions",
 			callback: async () => {
 				const view = await this.activateView();
 				if (view) {
@@ -91,13 +94,13 @@ export default class DeepNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: "index-vault",
-			name: "Index Vault for Cross-Topic Search",
+			name: "Index vault for cross-topic search",
 			callback: () => this.indexer.indexVault(),
 		});
 
 		this.addCommand({
 			id: "clear-index",
-			name: "Clear Semantic Search Index",
+			name: "Clear semantic search index",
 			callback: async () => {
 				new Notice("Clearing vector index...");
 				try {
@@ -111,12 +114,12 @@ export default class DeepNotesPlugin extends Plugin {
 
 		this.addCommand({
 			id: "show-index-stats",
-			name: "Show Semantic Index Stats (Debug)",
+			name: "Show semantic index stats (debug)",
 			callback: async () => {
 				try {
 					const stats = await this.vectorStore.getStats();
 					new Notice(`Index contains ${stats.totalChunks} chunks.`);
-					console.log("[DeepNotes] Index Stats:", stats);
+					console.debug("[DeepNotes] Index Stats:", stats);
 				} catch (e) {
 					new Notice(`Error getting stats: ${e}`);
 				}
@@ -127,9 +130,9 @@ export default class DeepNotesPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on(
 				"modify",
-				debounce((file: TFile) => {
-					if (file.extension === "md") {
-						this.indexer.indexSingleNote(file);
+				debounce((file) => {
+					if (file instanceof TFile && file.extension === "md") {
+						void this.indexer.indexSingleNote(file);
 					}
 				}, 5000)
 			)
@@ -137,9 +140,9 @@ export default class DeepNotesPlugin extends Plugin {
 
 		// Remove vectors for deleted notes from the index
 		this.registerEvent(
-			this.app.vault.on("delete", async (file: TFile) => {
-				if (file.extension === "md") {
-					await this.vectorStore.removeNote(file.path);
+			this.app.vault.on("delete", (file) => {
+				if (file instanceof TFile && file.extension === "md") {
+					void this.vectorStore.removeNote(file.path);
 				}
 			})
 		);
@@ -151,7 +154,7 @@ export default class DeepNotesPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_DEEP_NOTES);
+		// Obsidian handles leaf lifecycle — do not detach leaves here
 	}
 
 	async activateView(): Promise<DeepNotesView | null> {

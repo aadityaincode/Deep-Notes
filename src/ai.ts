@@ -1,4 +1,4 @@
-import type { AIProvider } from "./constants";
+import { requestUrl } from "obsidian";
 import type { SearchResult } from "./vectorStore";
 import type { ImagePayload } from "./ocr";
 import type { DeepNotesSettings } from "./settings";
@@ -48,23 +48,21 @@ export async function generateDeepNotesQuestions(
 
 	const imgs = images && images.length > 0 ? images : undefined;
 	let content: string;
-	       const provider = settings.provider;
-	       const model = settings.model;
-	       const ollamaBaseUrl = settings.ollamaBaseUrl;
-	       let apiKey = "";
-	       if (provider === "gemini") {
-		       apiKey = settings.geminiApiKey;
-	       }
+	const provider = settings.provider;
+	let apiKey = "";
+	if (provider === "gemini") {
+		apiKey = settings.geminiApiKey;
+	}
 
-	       // Call the appropriate AI provider
-	       switch (provider) {
-		       case "gemini":
-			       content = await callGemini(userMessage, apiKey, model, systemPrompt, imgs);
-			       break;
-		       case "ollama":
-			       content = await callOllama(userMessage, model, systemPrompt, ollamaBaseUrl, imgs);
-			       break;
-	       }
+	// Call the appropriate AI provider
+	switch (provider) {
+		case "gemini":
+			content = await callGemini(userMessage, apiKey, settings.model, systemPrompt, imgs);
+			break;
+		case "ollama":
+			content = await callOllama(userMessage, settings.model, systemPrompt, settings.ollamaBaseUrl, imgs);
+			break;
+	}
 
 	const items = parseResponse(content);
 
@@ -99,7 +97,8 @@ async function callOllama(
 		if (images && images.length > 0) {
 			userMsg.images = images.map((img) => img.base64);
 		}
-		return fetch(`${normalizedBase}/api/chat`, {
+		return requestUrl({
+			url: `${normalizedBase}/api/chat`,
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
@@ -116,15 +115,14 @@ async function callOllama(
 	};
 
 	let response = await doChat(model);
-	if (!response.ok) {
-		const err = await response.text();
+	if (response.status !== 200) {
+		const err = response.text;
 		if (response.status === 404 && /not found/i.test(err)) {
 			const fallbackModel = await findOllamaFallbackModel(model, normalizedBase);
 			if (fallbackModel) {
 				response = await doChat(fallbackModel);
-				if (response.ok) {
-					const data = await response.json();
-					return data.message?.content ?? "";
+				if (response.status === 200) {
+					return response.json.message?.content ?? "";
 				}
 			}
 
@@ -136,18 +134,20 @@ async function callOllama(
 		throw new Error(`Ollama API error (${response.status}): ${err}`);
 	}
 
-	const data = await response.json();
-	return data.message?.content ?? "";
+	return response.json.message?.content ?? "";
 }
 
 async function findOllamaFallbackModel(model: string, normalizedBase: string): Promise<string | null> {
 	try {
-		const tagsResponse = await fetch(`${normalizedBase}/api/tags`);
-		if (!tagsResponse.ok) {
+		const tagsResponse = await requestUrl({
+			url: `${normalizedBase}/api/tags`,
+			method: "GET",
+		});
+		if (tagsResponse.status !== 200) {
 			return null;
 		}
 
-		const tagsData = await tagsResponse.json();
+		const tagsData = tagsResponse.json;
 		const modelNames: string[] = Array.isArray(tagsData.models)
 			? tagsData.models.map((m: { name?: string }) => m.name ?? "").filter(Boolean)
 			: [];
@@ -210,7 +210,7 @@ function stripCodeFences(content: string): string {
 function cleanJsonCandidate(candidate: string): string {
 	return candidate
 		.replace(/,\s*([\]}])/g, "$1")
-		.replace(/[\x00-\x1F\x7F]/g, (c) => (["\r", "\n", "\t"].includes(c) ? c : ""));
+		.replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 }
 
 function extractJsonCandidates(raw: string, normalized: string): string[] {
@@ -296,7 +296,8 @@ function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
 				? toHumanReadableText(item.answer)
 				: undefined;
 
-	const rawType = String(item.type ?? item.kind ?? item.category ?? "").toLowerCase();
+	const rawTypeValue = item.type ?? item.kind ?? item.category ?? "";
+	const rawType = (typeof rawTypeValue === "string" ? rawTypeValue : "").toLowerCase();
 	const type: DeepNotesItem["type"] =
 		rawType === "knowledge-expansion" || rawType === "question"
 			? "knowledge-expansion"
@@ -363,7 +364,7 @@ function parseListItemsFromText(content: string): string[] {
 				return bullet[1];
 			}
 
-			const label = line.match(/^(?:q(?:uestion)?\s*\d*[:.-]|suggestion\s*\d*[:.-])\s*(.+)$/i);
+			const label = line.match(/^(?:q(?:uestion)?\s*\d*[.:~-]|suggestion\s*\d*[.:~-])\s*(.+)$/i);
 			return label ? label[1] : "";
 		})
 		.map((line) => toHumanReadableText(line))
@@ -384,101 +385,6 @@ function toHumanReadableText(value: string): string {
 		.replace(/`/g, "")
 		.replace(/\s+/g, " ")
 		.trim();
-}
-
-async function callOpenAI(
-	noteContent: string,
-	apiKey: string,
-	model: string,
-	systemPrompt: string,
-	images?: ImagePayload[]
-): Promise<string> {
-	// Build user content: text + optional images
-	let userContent: unknown;
-	if (images && images.length > 0) {
-		const parts: unknown[] = images.map((img) => ({
-			type: "image_url",
-			image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
-		}));
-		parts.push({ type: "text", text: noteContent });
-		userContent = parts;
-	} else {
-		userContent = noteContent;
-	}
-
-	const response = await fetch("https://api.openai.com/v1/chat/completions", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${apiKey}`,
-		},
-		body: JSON.stringify({
-			model,
-			messages: [
-				{ role: "system", content: systemPrompt },
-				{ role: "user", content: userContent },
-			],
-			temperature: 0.7,
-		}),
-	});
-
-	if (!response.ok) {
-		const err = await response.text();
-		throw new Error(`OpenAI API error (${response.status}): ${err}`);
-	}
-
-	const data = await response.json();
-	return data.choices?.[0]?.message?.content ?? "";
-}
-
-async function callAnthropic(
-	noteContent: string,
-	apiKey: string,
-	model: string,
-	systemPrompt: string,
-	images?: ImagePayload[]
-): Promise<string> {
-	// Build user content blocks: images first, then text
-	let contentBlocks: unknown;
-	if (images && images.length > 0) {
-		const parts: unknown[] = images.map((img) => ({
-			type: "image",
-			source: {
-				type: "base64",
-				media_type: img.mimeType,
-				data: img.base64,
-			},
-		}));
-		parts.push({ type: "text", text: noteContent });
-		contentBlocks = parts;
-	} else {
-		contentBlocks = noteContent;
-	}
-
-	const response = await fetch("https://api.anthropic.com/v1/messages", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			"x-api-key": apiKey,
-			"anthropic-version": "2023-06-01",
-			"anthropic-dangerous-direct-browser-access": "true",
-		},
-		body: JSON.stringify({
-			model,
-			max_tokens: 1024,
-			system: systemPrompt,
-			messages: [{ role: "user", content: contentBlocks }],
-		}),
-	});
-
-	if (!response.ok) {
-		const err = await response.text();
-		throw new Error(`Anthropic API error (${response.status}): ${err}`);
-	}
-
-	const data = await response.json();
-	const block = data.content?.[0];
-	return block?.text ?? "";
 }
 
 async function callGemini(
@@ -504,7 +410,8 @@ async function callGemini(
 	}
 	parts.push({ text: noteContent });
 
-	const response = await fetch(url, {
+	const response = await requestUrl({
+		url,
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
@@ -521,24 +428,18 @@ async function callGemini(
 		}),
 	});
 
-	if (!response.ok) {
-		const err = await response.text();
-		throw new Error(`Gemini API error (${response.status}): ${err}`);
+	if (response.status !== 200) {
+		throw new Error(`Gemini API error (${response.status}): ${response.text}`);
 	}
 
-	const data = await response.json();
-	return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+	return response.json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
-
-
 
 export async function evaluateResponses(
 	noteContent: string,
 	items: DeepNotesItem[],
 	userResponses: string[],
-	settings: DeepNotesSettings,
-	model: string, // Kept for signature compatibility, though unused
-	ollamaBaseUrl?: string // Kept for signature compatibility
+	settings: DeepNotesSettings
 ): Promise<EvaluationResult> {
 	const feedback: EvaluationFeedback[] = [];
 	let totalScore = 0;
@@ -655,26 +556,23 @@ Example:
 ]
 `;
 
+	const provider = settings.provider;
+	let apiKey = "";
+	if (provider === "gemini") {
+		apiKey = settings.geminiApiKey;
+	}
 
-	       const provider = settings.provider;
-	       const model = settings.model;
-	       const ollamaBaseUrl = settings.ollamaBaseUrl;
-	       let apiKey = "";
-	       if (provider === "gemini") {
-		       apiKey = settings.geminiApiKey;
-	       }
-
-	       let content = "";
-	       try {
-		       if (provider === "gemini") {
-			       content = await callGemini(prompt, apiKey, model, systemPrompt);
-		       } else if (provider === "ollama") {
-			       content = await callOllama(prompt, model, systemPrompt, ollamaBaseUrl);
-		       }
-	       } catch (e) {
-		       console.error("Deep Notes: Failed to generate sub-questions", e);
-		       return [];
-	       }
+	let content = "";
+	try {
+		if (provider === "gemini") {
+			content = await callGemini(prompt, apiKey, settings.model, systemPrompt);
+		} else if (provider === "ollama") {
+			content = await callOllama(prompt, settings.model, systemPrompt, settings.ollamaBaseUrl);
+		}
+	} catch (e) {
+		console.error("Deep Notes: Failed to generate sub-questions", e);
+		return [];
+	}
 
 	const items = parseResponse(content);
 
