@@ -1,3 +1,4 @@
+import { requestUrl } from "obsidian";
 import type { DeepNotesSettings } from "./settings";
 
 export type EmbeddingProvider = "gemini" | "ollama";
@@ -7,7 +8,8 @@ async function embedWithGemini(text: string, apiKey: string): Promise<number[]> 
         throw new Error("Gemini API key is required but not set.");
     }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${apiKey}`;
-    const response = await fetch(url, {
+    const response = await requestUrl({
+        url,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -15,20 +17,19 @@ async function embedWithGemini(text: string, apiKey: string): Promise<number[]> 
         }),
     });
 
-    if (!response.ok) {
-        let err = await response.text();
+    if (response.status !== 200) {
+        let err = response.text;
         try {
             // Try to parse JSON error for cleaner message
             const jsonErr = JSON.parse(err);
             if (jsonErr.error && jsonErr.error.message) {
                 err = jsonErr.error.message;
             }
-        } catch (_) { /* ignore */ }
+        } catch { /* ignore */ }
         throw new Error(`Gemini Embedding API error (${response.status}): ${err}`);
     }
 
-    const data = await response.json();
-    return data.embedding?.values ?? [];
+    return response.json.embedding?.values ?? [];
 }
 
 async function embedWithOllama(
@@ -39,7 +40,8 @@ async function embedWithOllama(
     const normalizedBase = baseUrl.replace(/\/$/, "");
     const url = `${normalizedBase}/api/embeddings`;
 
-    const response = await fetch(url, {
+    const response = await requestUrl({
+        url,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -48,8 +50,8 @@ async function embedWithOllama(
         }),
     });
 
-    if (!response.ok) {
-        let err = await response.text();
+    if (response.status !== 200) {
+        const err = response.text;
         // Handle model not found error gracefully
         if (response.status === 404 && /not found/i.test(err)) {
             throw new Error(
@@ -59,7 +61,7 @@ async function embedWithOllama(
         throw new Error(`Ollama Embedding API error (${response.status}): ${err}`);
     }
 
-    const data = await response.json();
+    const data = response.json;
     if (!data.embedding || !Array.isArray(data.embedding)) {
         throw new Error("Ollama response missing 'embedding' array.");
     }

@@ -58,11 +58,11 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Deep Notes Settings" });
+		new Setting(containerEl).setName("Deep Notes settings").setHeading();
 
 		// --- AI Provider ---
 		   new Setting(containerEl)
-			   .setName("AI Provider")
+			   .setName("AI provider")
 			   .setDesc("Choose which AI provider to use for generation.")
 			   .addDropdown((dropdown) => {
 				   for (const p of PROVIDERS) {
@@ -84,7 +84,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		   const provider = this.plugin.settings.provider;
 		   if (provider === "gemini") {
 			   new Setting(containerEl)
-				   .setName("Google Gemini API Key")
+				   .setName("Google Gemini API key")
 				   .setDesc("Your Google AI / Gemini API key")
 				   .addText((text) =>
 					   text
@@ -102,7 +102,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 				   .setDesc("Runs locally and does not require an API key.");
 
 			   new Setting(containerEl)
-				   .setName("Ollama Base URL")
+				   .setName("Ollama base URL")
 				   .setDesc("Local Ollama server URL.")
 				   .addText((text) =>
 					   text
@@ -134,10 +134,10 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 		   // System prompt is now hidden from the settings UI for simplicity and safety.
 
-		containerEl.createEl("h2", { text: "Image Scanning" });
+		new Setting(containerEl).setName("Image scanning").setHeading();
 
 		new Setting(containerEl)
-			.setName("Vision Provider")
+			.setName("Vision provider")
 			.setDesc("Choose which provider to use for scanning images.")
 			.addDropdown((dropdown) => {
 				dropdown.addOption("ollama", "Ollama (Local)");
@@ -153,14 +153,14 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 		if (this.plugin.settings.imageOcrProvider === "gemini") {
 			new Setting(containerEl)
-				.setName("Gemini Vision Model")
+				.setName("Gemini vision model")
 				.setDesc("Using 'gemini-2.0-flash' for vision tasks.")
 				.addText((text) => text.setValue("gemini-2.0-flash").setDisabled(true));
 
 			// Ensure Gemini key is visible if not already shown in main provider
 			if (this.plugin.settings.provider !== "gemini") {
 				new Setting(containerEl)
-					.setName("Gemini API Key (for Vision)")
+					.setName("Gemini API key (for vision)")
 					.setDesc("Required for Gemini vision.")
 					.addText((text) =>
 						text
@@ -207,17 +207,14 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 			);
 
 		// --- Cross-Topic Search (Embeddings) ---
-		containerEl.createEl("h2", { text: "Cross-Topic Search (Embeddings)" });
+		new Setting(containerEl).setName("Cross-topic search (embeddings)").setHeading();
 
 		// Warning about changing providers
-		const warningDiv = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
+		const warningDiv = containerEl.createDiv({ cls: "deep-notes-setting-warning deep-notes-setting-warning-text" });
 		warningDiv.setText("⚠️ IMPORTANT: If you change the embedding provider or model, you MUST run the 'Clear Semantic Search Index' command and re-index your vault. Otherwise, search will fail.");
-		warningDiv.style.color = "var(--text-error)";
-		warningDiv.style.marginBottom = "10px";
-		warningDiv.style.fontSize = "0.9em";
 
 		new Setting(containerEl)
-			.setName("Embedding Provider")
+			.setName("Embedding provider")
 			.setDesc("Choose which provider to use for embeddings.")
 			.addDropdown((dropdown) => {
 				dropdown.addOption("gemini", "Google Gemini (768d)");
@@ -234,19 +231,18 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 		if (this.plugin.settings.embeddingProvider === "gemini") {
 			new Setting(containerEl)
-				.setName("Gemini Embedding Model")
-				.setDesc("Uses 'gemini-embedding-001' (768 dimensions). Requires API Key.")
+				.setName("Gemini embedding model")
+				.setDesc("Uses 'gemini-embedding-001' (768 dimensions). Requires API key.")
 				.addText((text) => text.setValue("gemini-embedding-001").setDisabled(true));
 
 			if (!this.plugin.settings.geminiApiKey) {
-				const w = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
+				const w = containerEl.createDiv({ cls: "deep-notes-setting-warning deep-notes-setting-warning-text" });
 				w.setText("⚠️ Gemini API Key is required. Please set it under 'AI Provider' (temporarily switch if needed) or check if you have separate keys logic.");
-				w.style.color = "var(--text-error)";
 			}
 		} else {
 			// Ollama
 			new Setting(containerEl)
-				.setName("Ollama Embedding Model")
+				.setName("Ollama embedding model")
 				.setDesc("Name of the Ollama model to use for embeddings (e.g., 'nomic-embed-text', 'mxbai-embed-large'). Ensure you have pulled this model (`ollama pull <model>`).")
 				.addText((text) =>
 					text
@@ -259,33 +255,14 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 				);
 
 			new Setting(containerEl)
-				.setName("Ollama Base URL")
-				.setDesc("Re-uses the Base URL set above.")
+				.setName("Ollama base URL")
+				.setDesc("Re-uses the base URL set above.")
 				.addText((text) => text.setValue(this.plugin.settings.ollamaBaseUrl).setDisabled(true));
 		}
 
-		// Logic to ensure Gemini API key is visible/set-able if Embedding Provider is Gemini
-		// AND Main provider is NOT Gemini AND Vision Provider is NOT Gemini (since we add logic for that above too)
-		// Basically: If any Gemini feature is on, show the key field if not already shown.
-		// My logic above adds "Gemini API Key (for Vision)" if Vision is Gemini and Main != Gemini.
-		// My logic below adds "Gemini API Key (for Embeddings)" if Embed is Gemini and Main != Gemini.
-		// Issue: If I have BOTH Vision=Gemini and Embedding=Gemini and Main=OpenAI, I will show TWO key fields.
-		// That's redundant.
-		// Better: Check if Gemini Key field has ALREADY been rendered in this cycle?
-		// No easy way to check.
-		// Let's just be smart:
-		// If Main=Gemini -> Key is at top. Done.
-		// If Main!=Gemini:
-		//    Check if Vision=Gemini OR Embedding=Gemini. If so, show "Gemini API Key" once?
-		//    But they are in different sections (Image Scanning vs Embeddings).
-		//    It's okay to show it in the specific section where it's needed, for clarity.
-		//    "Gemini API Key (for Vision)" and "Gemini API Key (for Embeddings)" is fine.
-		//    They bind to the same `settings.geminiApiKey`. So typing in one updates all.
-		//    I'll keep it as is. It's user-friendly.
-
 		if (this.plugin.settings.embeddingProvider === "gemini" && this.plugin.settings.provider !== "gemini") {
 			new Setting(containerEl)
-				.setName("Gemini API Key (for Embeddings)")
+				.setName("Gemini API key (for embeddings)")
 				.setDesc("Required for Gemini embeddings.")
 				.addText((text) =>
 					text

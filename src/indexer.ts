@@ -77,12 +77,12 @@ export class VaultIndexer {
 
     async indexSingleNote(file: TFile): Promise<void> {
         try {
-            console.log(`[DeepNotes] Indexing: ${file.path}`);
+            console.debug(`[DeepNotes] Indexing: ${file.path}`);
             const content = await this.plugin.app.vault.read(file);
             const embedFn = (text: string) =>
                 getEmbedding(text, this.plugin.settings);
             await this.vectorStore.indexNote(file, content, embedFn);
-            console.log(`[DeepNotes] Automatically indexed ${file.path}`);
+            console.debug(`[DeepNotes] Automatically indexed ${file.path}`);
         } catch (e) {
             console.error(`[DeepNotes] Failed to index ${file.path}:`, e);
             throw e; // Propagate error to count as failure
