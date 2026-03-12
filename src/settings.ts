@@ -58,7 +58,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("Deep Notes settings").setHeading();
+
 
 		// --- AI Provider ---
 		   new Setting(containerEl)
@@ -84,8 +84,8 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		   const provider = this.plugin.settings.provider;
 		   if (provider === "gemini") {
 			   new Setting(containerEl)
-				   .setName("Google Gemini API key")
-				   .setDesc("Your Google AI / Gemini API key")
+				   .setName("Gemini API key")
+				   .setDesc("Your Gemini API key.")
 				   .addText((text) =>
 					   text
 						   .setPlaceholder("AI...")
@@ -103,7 +103,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 			   new Setting(containerEl)
 				   .setName("Ollama base URL")
-				   .setDesc("Local Ollama server URL.")
+				   .setDesc("Local server URL")
 				   .addText((text) =>
 					   text
 						   .setPlaceholder("http://127.0.0.1:11434")
@@ -140,8 +140,8 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 			.setName("Vision provider")
 			.setDesc("Choose which provider to use for scanning images.")
 			.addDropdown((dropdown) => {
-				dropdown.addOption("ollama", "Ollama (Local)");
-				dropdown.addOption("gemini", "Google Gemini");
+				dropdown.addOption("ollama", "Ollama");
+				dropdown.addOption("gemini", "Gemini");
 				dropdown
 					.setValue(this.plugin.settings.imageOcrProvider || "ollama")
 					.onChange(async (value) => {
@@ -154,14 +154,14 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		if (this.plugin.settings.imageOcrProvider === "gemini") {
 			new Setting(containerEl)
 				.setName("Gemini vision model")
-				.setDesc("Using 'gemini-2.0-flash' for vision tasks.")
+				.setDesc("Fixed model for vision tasks")
 				.addText((text) => text.setValue("gemini-2.0-flash").setDisabled(true));
 
 			// Ensure Gemini key is visible if not already shown in main provider
 			if (this.plugin.settings.provider !== "gemini") {
 				new Setting(containerEl)
-					.setName("Gemini API key (for vision)")
-					.setDesc("Required for Gemini vision.")
+					.setName("API key (for vision)")
+					.setDesc("Required for vision.")
 					.addText((text) =>
 						text
 							.setPlaceholder("AI...")
@@ -177,10 +177,10 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 			// Ollama
 			new Setting(containerEl)
 				.setName("Vision model")
-				.setDesc("Ollama vision model for image scanning (e.g. llava:latest). Only used with the 'Scan Images' button.")
+				.setDesc("Model to use for image scanning")
 				.addText((text) =>
 					text
-						.setPlaceholder("llava:latest")
+						.setPlaceholder("Enter model name")
 						.setValue(this.plugin.settings.imageOcrVisionModel)
 						.onChange(async (value) => {
 							this.plugin.settings.imageOcrVisionModel = value.trim() || "llava:latest";
@@ -189,7 +189,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 				);
 
 			const scanInfo = containerEl.createDiv({ cls: "deep-notes-setting-warning" });
-			scanInfo.setText("Image scanning sends embedded images directly to your AI model. For Ollama, pull a vision model first: ollama pull llava:latest");
+			scanInfo.setText("Image scanning sends images to your AI model. Pull a vision model first.");
 		}
 
 		new Setting(containerEl)
@@ -207,18 +207,18 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 			);
 
 		// --- Cross-Topic Search (Embeddings) ---
-		new Setting(containerEl).setName("Cross-topic search (embeddings)").setHeading();
+		new Setting(containerEl).setName("Cross-topic search").setHeading();
 
 		// Warning about changing providers
 		const warningDiv = containerEl.createDiv({ cls: "deep-notes-setting-warning deep-notes-setting-warning-text" });
-		warningDiv.setText("⚠️ IMPORTANT: If you change the embedding provider or model, you MUST run the 'Clear Semantic Search Index' command and re-index your vault. Otherwise, search will fail.");
+		warningDiv.setText("Changing the embedding provider or model requires clearing and re-indexing.");
 
 		new Setting(containerEl)
 			.setName("Embedding provider")
 			.setDesc("Choose which provider to use for embeddings.")
 			.addDropdown((dropdown) => {
-				dropdown.addOption("gemini", "Google Gemini (768d)");
-				dropdown.addOption("ollama", "Ollama (Local)");
+				dropdown.addOption("gemini", "Gemini (768d)");
+				dropdown.addOption("ollama", "Ollama");
 				dropdown
 					.setValue(this.plugin.settings.embeddingProvider)
 					.onChange(async (value) => {
@@ -232,21 +232,21 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		if (this.plugin.settings.embeddingProvider === "gemini") {
 			new Setting(containerEl)
 				.setName("Gemini embedding model")
-				.setDesc("Uses 'gemini-embedding-001' (768 dimensions). Requires API key.")
+				.setDesc("Fixed model for text embeddings (768 dimensions)")
 				.addText((text) => text.setValue("gemini-embedding-001").setDisabled(true));
 
 			if (!this.plugin.settings.geminiApiKey) {
 				const w = containerEl.createDiv({ cls: "deep-notes-setting-warning deep-notes-setting-warning-text" });
-				w.setText("⚠️ Gemini API Key is required. Please set it under 'AI Provider' (temporarily switch if needed) or check if you have separate keys logic.");
+				w.setText("Gemini API key is required. Set it under the provider section.");
 			}
 		} else {
 			// Ollama
 			new Setting(containerEl)
 				.setName("Ollama embedding model")
-				.setDesc("Name of the Ollama model to use for embeddings (e.g., 'nomic-embed-text', 'mxbai-embed-large'). Ensure you have pulled this model (`ollama pull <model>`).")
+				.setDesc("Model to use for embeddings")
 				.addText((text) =>
 					text
-						.setPlaceholder("nomic-embed-text")
+						.setPlaceholder("Enter model name")
 						.setValue(this.plugin.settings.ollamaEmbeddingModel)
 						.onChange(async (value) => {
 							this.plugin.settings.ollamaEmbeddingModel = value.trim();
@@ -262,8 +262,8 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 		if (this.plugin.settings.embeddingProvider === "gemini" && this.plugin.settings.provider !== "gemini") {
 			new Setting(containerEl)
-				.setName("Gemini API key (for embeddings)")
-				.setDesc("Required for Gemini embeddings.")
+				.setName("API key (for embeddings)")
+				.setDesc("Required for embeddings.")
 				.addText((text) =>
 					text
 						.setPlaceholder("AI...")

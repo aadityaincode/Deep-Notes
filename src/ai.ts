@@ -4,6 +4,19 @@ import type { ImagePayload } from "./ocr";
 import type { DeepNotesSettings } from "./settings";
 import { getEmbedding } from "./embeddings";
 
+// API response types
+interface OllamaChatResponse {
+	message?: { content?: string };
+}
+
+interface OllamaTagsResponse {
+	models?: { name?: string }[];
+}
+
+interface GeminiResponse {
+	candidates?: { content?: { parts?: { text?: string }[] } }[];
+}
+
 export interface DeepNotesItem {
 	type: "knowledge-expansion" | "suggestion" | "cross-topic";
 	text: string;
@@ -122,7 +135,7 @@ async function callOllama(
 			if (fallbackModel) {
 				response = await doChat(fallbackModel);
 				if (response.status === 200) {
-					return response.json.message?.content ?? "";
+					return (response.json as OllamaChatResponse).message?.content ?? "";
 				}
 			}
 
@@ -134,7 +147,7 @@ async function callOllama(
 		throw new Error(`Ollama API error (${response.status}): ${err}`);
 	}
 
-	return response.json.message?.content ?? "";
+	return (response.json as OllamaChatResponse).message?.content ?? "";
 }
 
 async function findOllamaFallbackModel(model: string, normalizedBase: string): Promise<string | null> {
@@ -147,9 +160,9 @@ async function findOllamaFallbackModel(model: string, normalizedBase: string): P
 			return null;
 		}
 
-		const tagsData = tagsResponse.json;
+		const tagsData = tagsResponse.json as OllamaTagsResponse;
 		const modelNames: string[] = Array.isArray(tagsData.models)
-			? tagsData.models.map((m: { name?: string }) => m.name ?? "").filter(Boolean)
+			? tagsData.models.map((m) => m.name ?? "").filter(Boolean)
 			: [];
 
 		if (modelNames.length === 0) {
@@ -176,7 +189,7 @@ function parseResponse(content: string): DeepNotesItem[] {
 	for (const candidate of candidates) {
 		try {
 			const cleaned = cleanJsonCandidate(candidate);
-			const parsed = JSON.parse(cleaned);
+			const parsed: unknown = JSON.parse(cleaned);
 			const items = parseDeepNotesItems(parsed);
 			if (items.length > 0) {
 				return items;
@@ -210,7 +223,7 @@ function stripCodeFences(content: string): string {
 function cleanJsonCandidate(candidate: string): string {
 	return candidate
 		.replace(/,\s*([\]}])/g, "$1")
-		.replace(/[\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+		.replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
 }
 
 function extractJsonCandidates(raw: string, normalized: string): string[] {
@@ -345,7 +358,7 @@ function extractTextFieldsFromJsonLikeText(content: string): DeepNotesItem[] {
 
 function decodeJsonString(value: string): string {
 	try {
-		return JSON.parse(`"${value.replace(/"/g, '\\"')}"`);
+		return JSON.parse(`"${value.replace(/"/g, '\\"')}"`) as string;
 	} catch {
 		return value;
 	}
@@ -432,7 +445,7 @@ async function callGemini(
 		throw new Error(`Gemini API error (${response.status}): ${response.text}`);
 	}
 
-	return response.json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+	return (response.json as GeminiResponse).candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
 export async function evaluateResponses(

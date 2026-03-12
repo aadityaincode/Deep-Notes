@@ -115,7 +115,7 @@ function buildDecorations(items: HighlightData[], docText: string): DecorationSe
  * Helper to replace markdown syntax chars with spaces to allow fuzzy matching.
  */
 function maskMarkdownSyntax(text: string): string {
-    return text.replace(/[*#_\[\]`>~=]/g, " ");
+    return text.replace(/[*#_[\]`>~=]/g, " ");
 }
 
 /**
@@ -128,7 +128,7 @@ function expandRangeToMarkdownSyntax(
 ): { from: number; to: number } {
     let { from, to } = range;
 
-    const isFormattingChar = (char: string) => /[*_=\[\]`~]/.test(char);
+    const isFormattingChar = (char: string) => /[*_=[\]`~]/.test(char);
 
     // 1. Expand tight formatting left (e.g. **)
     while (from > 0 && isFormattingChar(docText[from - 1])) {
@@ -144,7 +144,7 @@ function expandRangeToMarkdownSyntax(
     // Look backwards from current 'from' excluding whitespace
     // Simplification: Check immediate preceding string
     const preceding = docText.slice(Math.max(0, from - 10), from);
-    const headingMatch = preceding.match(/([#\-]+[ \t]+)$/);
+    const headingMatch = preceding.match(/([#-]+[ \t]+)$/);
     if (headingMatch) {
         from -= headingMatch[1].length;
     }

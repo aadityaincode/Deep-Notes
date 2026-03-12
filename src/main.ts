@@ -31,14 +31,14 @@ export default class DeepNotesPlugin extends Plugin {
 
 		this.registerView(VIEW_TYPE_DEEP_NOTES, (leaf) => new DeepNotesView(leaf, this));
 
-		this.addRibbonIcon("triangle", "Deep Notes", () => {
-			this.activateView();
+		this.addRibbonIcon("triangle", "Open deep notes", () => {
+			void this.activateView();
 		});
 
 		this.addCommand({
 			id: "open-view",
 			name: "Open view",
-			callback: () => this.activateView(),
+			callback: () => { void this.activateView(); },
 		});
 
 		this.addCommand({
@@ -86,7 +86,7 @@ export default class DeepNotesPlugin extends Plugin {
 			callback: async () => {
 				const view = await this.activateView();
 				if (view) {
-					view.triggerGeneration();
+					void view.triggerGeneration();
 				}
 			},
 		});
@@ -95,7 +95,7 @@ export default class DeepNotesPlugin extends Plugin {
 		this.addCommand({
 			id: "index-vault",
 			name: "Index vault for cross-topic search",
-			callback: () => this.indexer.indexVault(),
+			callback: () => { void this.indexer.indexVault(); },
 		});
 
 		this.addCommand({
@@ -171,12 +171,12 @@ export default class DeepNotesPlugin extends Plugin {
 			});
 		}
 
-		workspace.revealLeaf(leaf);
+		void workspace.revealLeaf(leaf);
 		return leaf.view as DeepNotesView;
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<DeepNotesSettings>);
 		// Always use the latest system prompt from code
 		this.settings.systemPrompt = DEFAULT_SETTINGS.systemPrompt;
 	}

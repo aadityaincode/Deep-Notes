@@ -3,6 +3,15 @@ import type { DeepNotesSettings } from "./settings";
 
 export type EmbeddingProvider = "gemini" | "ollama";
 
+interface GeminiEmbeddingResponse {
+    embedding?: { values?: number[] };
+    error?: { message?: string };
+}
+
+interface OllamaEmbeddingResponse {
+    embedding?: number[];
+}
+
 async function embedWithGemini(text: string, apiKey: string): Promise<number[]> {
     if (!apiKey) {
         throw new Error("Gemini API key is required but not set.");
@@ -21,15 +30,15 @@ async function embedWithGemini(text: string, apiKey: string): Promise<number[]> 
         let err = response.text;
         try {
             // Try to parse JSON error for cleaner message
-            const jsonErr = JSON.parse(err);
-            if (jsonErr.error && jsonErr.error.message) {
+            const jsonErr = response.json as GeminiEmbeddingResponse;
+            if (jsonErr.error?.message) {
                 err = jsonErr.error.message;
             }
         } catch { /* ignore */ }
         throw new Error(`Gemini Embedding API error (${response.status}): ${err}`);
     }
 
-    return response.json.embedding?.values ?? [];
+    return (response.json as GeminiEmbeddingResponse).embedding?.values ?? [];
 }
 
 async function embedWithOllama(
@@ -61,7 +70,7 @@ async function embedWithOllama(
         throw new Error(`Ollama Embedding API error (${response.status}): ${err}`);
     }
 
-    const data = response.json;
+    const data = response.json as OllamaEmbeddingResponse;
     if (!data.embedding || !Array.isArray(data.embedding)) {
         throw new Error("Ollama response missing 'embedding' array.");
     }
