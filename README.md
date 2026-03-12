@@ -75,16 +75,14 @@ Go to **Settings > Deep Notes** to configure your AI provider and other options.
 
 ## Configuration: Setting Up API Keys
 
-To use Deep Notes with cloud AI providers (Gemini, OpenAI, Anthropic), you must provide your own API keys:
+To use Deep Notes with cloud AI providers (Gemini), you must provide your own API keys:
 
 1. Open Obsidian Settings > Deep Notes.
-2. Select your preferred AI provider (Gemini, OpenAI, Anthropic, or Ollama).
-3. For Gemini, OpenAI, or Anthropic:
+2. Select your preferred AI provider (Gemini or Ollama).
+3. For Gemini:
    - Enter your API key in the corresponding field.
    - You can obtain API keys from your provider's developer portal:
      - [Google Gemini](https://aistudio.google.com/app/apikey)
-     - [OpenAI](https://platform.openai.com/account/api-keys)
-     - [Anthropic](https://console.anthropic.com/settings/keys)
 4. For Ollama (local), no API key is required, but you must have Ollama running on your machine.
 
 Your API keys are stored securely in your local Obsidian configuration and are never shared.
