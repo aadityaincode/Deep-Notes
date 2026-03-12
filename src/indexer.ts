@@ -46,7 +46,7 @@ export class VaultIndexer {
                 try {
                     await this.indexSingleNote(file);
                     indexed++;
-                } catch (e) {
+                } catch {
                     failed++;
                     console.error(`[DeepNotes] Skipping ${file.path} due to error.`);
                 }

@@ -46,7 +46,7 @@ export class DeepNotesView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Deep Notes";
+		return "Deep notes";
 	}
 
 	getIcon(): string {
@@ -63,7 +63,7 @@ export class DeepNotesView extends ItemView {
 			)
 		);
 		// Initial check
-		await this.handleActiveLeafChange();
+		this.handleActiveLeafChange();
 	}
 
 	onClose(): Promise<void> {
@@ -162,7 +162,7 @@ export class DeepNotesView extends ItemView {
 		const activeKey = this.getActiveKey();
 
 		if (provider !== "ollama" && !activeKey) {
-			new Notice("Please set your API key in Deep Notes settings.");
+			new Notice("Please set your API key in settings.");
 			return;
 		}
 
@@ -301,7 +301,7 @@ export class DeepNotesView extends ItemView {
 
 		// Check keys based on usage
 		if (provider !== "ollama" && !activeKey) {
-			new Notice("Please set your main API key in Deep Notes settings.");
+			new Notice("Please set your main API key in settings.");
 			return;
 		}
 
@@ -428,7 +428,7 @@ ${noteContent}`;
 		const activeKey = this.getActiveKey();
 
 		if (provider !== "ollama" && !activeKey) {
-			new Notice("Please set your API key in Deep Notes settings.");
+			new Notice("Please set your API key in settings.");
 			return;
 		}
 
@@ -895,7 +895,7 @@ ${noteContent}`;
 			cls: "deep-notes-response",
 			placeholder: "Type your response...",
 			attr: { rows: "3" },
-		}) as HTMLTextAreaElement;
+		});
 
 		// Init value if exists
 		if (item.userResponse) {
@@ -1154,7 +1154,7 @@ ${noteContent}`;
 			const cb = label.createEl("input", {
 				type: "checkbox",
 				cls: "deep-notes-picker-checkbox",
-			}) as HTMLInputElement;
+			});
 			cb.checked = this.selectedImagePaths.has(img.path);
 			cb.addEventListener("change", () => {
 				if (cb.checked) {
@@ -1199,7 +1199,7 @@ ${noteContent}`;
 		const scanBtn = actions.createEl("button", {
 			text: "Scan",
 			cls: "deep-notes-generate-btn deep-notes-scan-selected-btn",
-		}) as HTMLButtonElement;
+		});
 		scanBtn.disabled = this.selectedImagePaths.size === 0;
 		scanBtn.addEventListener("click", () => {
 			void this.triggerImageScan();

@@ -1,5 +1,14 @@
 import { App, normalizePath, TFile, requestUrl } from "obsidian";
 
+// API response types
+interface OllamaChatResponse {
+	message?: { content?: string };
+}
+
+interface GeminiResponse {
+	candidates?: { content?: { parts?: { text?: string }[] } }[];
+}
+
 export interface OCRSettings {
 	enabled: boolean;
 	provider: "ollama" | "gemini";
@@ -403,7 +412,7 @@ export interface ExcalidrawContent {
 export async function renderExcalidrawAsPNG(
 	paths: string[]
 ): Promise<ImagePayload[]> {
-	const windowObj = window as Record<string, unknown>;
+	const windowObj = window as unknown as Record<string, unknown>;
 	const excalidrawAutomate = windowObj.ExcalidrawAutomate as { getAPI?: () => Record<string, unknown> } | undefined;
 	const ea = excalidrawAutomate?.getAPI?.();
 	if (!ea) {
@@ -576,7 +585,7 @@ async function runOllamaVisionOCR(
 		throw new Error(`Ollama vision OCR error (${response.status}): ${err}`);
 	}
 
-	return response.json.message?.content ?? "";
+	return (response.json as OllamaChatResponse).message?.content ?? "";
 }
 
 async function runGeminiVisionOCR(
@@ -618,5 +627,5 @@ async function runGeminiVisionOCR(
 		throw new Error(`Gemini Vision API error (${response.status}): ${response.text}`);
 	}
 
-	return response.json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+	return (response.json as GeminiResponse).candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
