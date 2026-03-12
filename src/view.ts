@@ -46,14 +46,14 @@ export class DeepNotesView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Deep notes";
+		return "Deep Notes";
 	}
 
 	getIcon(): string {
 		return "triangle";
 	}
 
-	async onOpen(): Promise<void> {
+	onOpen(): Promise<void> {
 		this.registerEvent(
 			this.app.workspace.on(
 				"active-leaf-change",
@@ -64,6 +64,7 @@ export class DeepNotesView extends ItemView {
 		);
 		// Initial check
 		this.handleActiveLeafChange();
+        return Promise.resolve();
 	}
 
 	onClose(): Promise<void> {
