@@ -46,7 +46,7 @@ export class DeepNotesView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Deep Notes";
+		return "Deep notes";
 	}
 
 	getIcon(): string {
@@ -249,7 +249,7 @@ export class DeepNotesView extends ItemView {
 			this.saveCurrentStateToCache();
 
 		} catch (e) {
-			new Notice(`Deep Notes error: ${e instanceof Error ? e.message : e}`);
+			new Notice(`Deep notes error: ${e instanceof Error ? e.message : e}`);
 			this.items = [];
 		} finally {
 			this.loading = false;
@@ -957,8 +957,8 @@ ${noteContent}`;
 			item.type === "cross-topic"
 				? "Cross-topic question"
 				: item.type === "knowledge-expansion"
-					? "Deep Notes question"
-					: "Deep Notes suggestion";
+					? "Deep notes question"
+					: "Deep notes suggestion";
 		const calloutBlock = [
 			"",
 			`> [!${calloutType}] ${calloutTitle}`,
