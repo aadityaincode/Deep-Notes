@@ -85,7 +85,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		if (provider === "gemini") {
 			new Setting(containerEl)
 				.setName("Gemini API key")
-				.setDesc("Your Gemini API key")
+				.setDesc("Gemini API key")
 				.addText((text) =>
 					text
 						.setPlaceholder("AI...")
