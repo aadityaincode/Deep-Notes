@@ -61,59 +61,59 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 
 		// --- AI Provider ---
-		   new Setting(containerEl)
-			   .setName("AI provider")
-			   .setDesc("Choose which AI provider to use for generation.")
-			   .addDropdown((dropdown) => {
-				   for (const p of PROVIDERS) {
-					   dropdown.addOption(p.value, p.label);
-				   }
-				   dropdown
-					   .setValue(this.plugin.settings.provider)
-					   .onChange(async (value) => {
-						   const provider = value as AIProvider;
-						   this.plugin.settings.provider = provider;
-						   this.plugin.settings.model =
-							   DEFAULT_MODEL_BY_PROVIDER[provider];
-						   await this.plugin.saveSettings();
-						   this.display();
-					   });
-			   });
+		new Setting(containerEl)
+			.setName("AI provider")
+			.setDesc("Choose which AI provider to use for generation.")
+			.addDropdown((dropdown) => {
+				for (const p of PROVIDERS) {
+					dropdown.addOption(p.value, p.label);
+				}
+				dropdown
+					.setValue(this.plugin.settings.provider)
+					.onChange(async (value) => {
+						const provider = value as AIProvider;
+						this.plugin.settings.provider = provider;
+						this.plugin.settings.model =
+							DEFAULT_MODEL_BY_PROVIDER[provider];
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
 
 		// API key for current provider
-		   const provider = this.plugin.settings.provider;
-		   if (provider === "gemini") {
-			   new Setting(containerEl)
-				   .setName("Gemini API key")
-				   .setDesc("Your Gemini API key.")
-				   .addText((text) =>
-					   text
-						   .setPlaceholder("AI...")
-						   .setValue(this.plugin.settings.geminiApiKey)
-						   .then((t) => (t.inputEl.type = "password"))
-						   .onChange(async (value) => {
-							   this.plugin.settings.geminiApiKey = value.trim();
-							   await this.plugin.saveSettings();
-						   })
-				   );
-		   } else if (provider === "ollama") {
-			   new Setting(containerEl)
-				   .setName("Ollama")
-				   .setDesc("Runs locally and does not require an API key.");
+		const provider = this.plugin.settings.provider;
+		if (provider === "gemini") {
+			new Setting(containerEl)
+				.setName("Gemini API key")
+				.setDesc("Your Gemini API key")
+				.addText((text) =>
+					text
+						.setPlaceholder("AI...")
+						.setValue(this.plugin.settings.geminiApiKey)
+						.then((t) => (t.inputEl.type = "password"))
+						.onChange(async (value) => {
+							this.plugin.settings.geminiApiKey = value.trim();
+							await this.plugin.saveSettings();
+						})
+				);
+		} else if (provider === "ollama") {
+			new Setting(containerEl)
+				.setName("Ollama")
+				.setDesc("Runs locally and does not require an API key.");
 
-			   new Setting(containerEl)
-				   .setName("Ollama base URL")
-				   .setDesc("Local server URL")
-				   .addText((text) =>
-					   text
-						   .setPlaceholder("http://127.0.0.1:11434")
-						   .setValue(this.plugin.settings.ollamaBaseUrl)
-						   .onChange(async (value) => {
-							   this.plugin.settings.ollamaBaseUrl = value.trim() || "http://127.0.0.1:11434";
-							   await this.plugin.saveSettings();
-						   })
-				   );
-		   }
+			new Setting(containerEl)
+				.setName("Ollama base URL")
+				.setDesc("Local server URL")
+				.addText((text) =>
+					text
+						.setPlaceholder("http://127.0.0.1:11434")
+						.setValue(this.plugin.settings.ollamaBaseUrl)
+						.onChange(async (value) => {
+							this.plugin.settings.ollamaBaseUrl = value.trim() || "http://127.0.0.1:11434";
+							await this.plugin.saveSettings();
+						})
+				);
+		}
 
 		// Model dropdown (filtered by provider)
 		const models = MODELS_BY_PROVIDER[provider];
@@ -132,7 +132,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 					});
 			});
 
-		   // System prompt is now hidden from the settings UI for simplicity and safety.
+		// System prompt is now hidden from the settings UI for simplicity and safety.
 
 		new Setting(containerEl).setName("Image scanning").setHeading();
 
