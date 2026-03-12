@@ -223,7 +223,7 @@ function stripCodeFences(content: string): string {
 function cleanJsonCandidate(candidate: string): string {
 	return candidate
 		.replace(/,\s*([\]}])/g, "$1")
-		// eslint-disable-next-line no-control-regex
+		// eslint-disable-next-line no-control-regex -- We intentionally need to strip these characters from the AI output to ensure valid JSON parsing.
 		.replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
 }
 
