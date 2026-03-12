@@ -24,8 +24,8 @@ export default defineConfig([
             },
         },
         rules: {
-            "obsidianmd/sample-names": "off",
-            "no-control-regex": "off",
+            // "obsidianmd/sample-names": "off",
+            // "no-control-regex": "off",
             "obsidianmd/ui/sentence-case": ["error", {
                 brands: [
                     // Default brands (inherited list)
@@ -39,7 +39,7 @@ export default defineConfig([
                     "Notion", "Evernote", "Roam Research", "Logseq", "Anki", "Reddit",
                     "VS Code", "Visual Studio Code", "IntelliJ IDEA", "WebStorm", "PyCharm",
                     // Custom brands for this plugin
-                    "Gemini", "Ollama",
+                    "Gemini", "Ollama", "Deep Notes",
                 ],
             }],
         },

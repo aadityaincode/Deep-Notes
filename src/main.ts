@@ -31,7 +31,7 @@ export default class DeepNotesPlugin extends Plugin {
 
 		this.registerView(VIEW_TYPE_DEEP_NOTES, (leaf) => new DeepNotesView(leaf, this));
 
-		this.addRibbonIcon("triangle", "Open deep notes", () => {
+		this.addRibbonIcon("triangle", "Open Deep Notes", () => {
 			void this.activateView();
 		});
 
