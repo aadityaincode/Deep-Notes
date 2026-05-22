@@ -1,4 +1,4 @@
-import { ItemView, Notice, WorkspaceLeaf, TFile, debounce, setIcon } from "obsidian";
+import { App, ItemView, Notice, WorkspaceLeaf, TFile, debounce, setIcon } from "obsidian";
 import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT } from "./constants";
 import type { AIProvider } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult, generateDeepNotesSubQuestions } from "./ai";
@@ -8,6 +8,57 @@ import { listEmbeddedImages, loadImagesByPaths, resolveExcalidrawEmbeddedImages,
 import { saveSession, getSessionsForNote, deleteSession, QASession } from "./history";
 import { HIGHLIGHT_COLORS, applyHighlights, clearAllHighlights, scrollToExcerpt, findExcerptInText } from "./highlights";
 import type DeepNotesPlugin from "./main";
+import type { DeepNotesStudyMode } from "./settings";
+
+function reciprocalRankFusion(
+    denseResults: SearchResult[],
+    sparseResults: SearchResult[],
+    k = 60
+): SearchResult[] {
+    const scores = new Map<string, number>();
+    const resultMap = new Map<string, SearchResult>();
+
+    const rrfScore = (rank: number) => 1 / (k + rank + 1);
+
+    denseResults.forEach((r, i) => {
+        scores.set(r.filePath, (scores.get(r.filePath) ?? 0) + rrfScore(i));
+        resultMap.set(r.filePath, r);
+    });
+
+    sparseResults.forEach((r, i) => {
+        scores.set(r.filePath, (scores.get(r.filePath) ?? 0) + rrfScore(i));
+        if (!resultMap.has(r.filePath)) resultMap.set(r.filePath, r);
+    });
+
+    return [...scores.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([path, score]) => ({ ...resultMap.get(path)!, score }));
+}
+
+function applyGraphBoost(app: App, activeFile: TFile, results: SearchResult[]): SearchResult[] {
+    const cache = app.metadataCache.getFileCache(activeFile);
+    const outLinkTitles = new Set(
+        (cache?.links ?? []).map((l) => l.link.split("#")[0].trim().toLowerCase())
+    );
+
+    const backlinkedTitles = new Set<string>();
+    for (const f of app.vault.getMarkdownFiles()) {
+        const fc = app.metadataCache.getFileCache(f);
+        if (fc?.links?.some((l) => l.link.split("#")[0].trim().toLowerCase() === activeFile.basename.toLowerCase())) {
+            backlinkedTitles.add(f.basename.toLowerCase());
+        }
+    }
+
+    return results
+        .map((r) => {
+            const titleLower = r.noteTitle.toLowerCase();
+            let multiplier = 1.0;
+            if (outLinkTitles.has(titleLower)) multiplier *= 1.20;
+            if (backlinkedTitles.has(titleLower)) multiplier *= 1.10;
+            return { ...r, score: r.score * multiplier };
+        })
+        .sort((a, b) => b.score - a.score);
+}
 
 type ViewMode = "questions" | "evaluation" | "history";
 
@@ -35,6 +86,7 @@ export class DeepNotesView extends ItemView {
 	private showImagePicker = false;
 	private availableImages: ImageInfo[] = [];
 	private selectedImagePaths: Set<string> = new Set();
+	private flippedCards = new Set<number>();
 
 	constructor(leaf: WorkspaceLeaf, plugin: DeepNotesPlugin) {
 		super(leaf);
@@ -186,23 +238,38 @@ export class DeepNotesView extends ItemView {
 			await this.plugin.indexer.indexSingleNote(file);
 			const enrichedContent = content;
 
-			// Search for related notes via vector store
+			// Hybrid retrieval: dense vector + BM25 keyword search, fused with RRF + graph boost
 			let relatedContext: SearchResult[] | undefined = undefined;
 			try {
 				const stats = await this.plugin.vectorStore.getStats();
 				if (stats.totalChunks > 0) {
 					const queryEmbedding = await getEmbedding(enrichedContent, this.plugin.settings);
-					const results = await this.plugin.vectorStore.search(
-						queryEmbedding,
-						5,
-						file.path
-					);
-					// Only include results for notes that still exist in the vault
-					const existingFiles = new Set(
-						this.app.vault.getMarkdownFiles().map((f) => f.path)
-					);
-					const validResults = results.filter((r) => existingFiles.has(r.filePath));
-					console.debug(`[DeepNotes] Related context found: ${validResults.length} items`, validResults);
+
+					// Phase 2A: parallel dense + sparse search
+					const [denseResults, bm25RawResults] = await Promise.all([
+						this.plugin.vectorStore.search(queryEmbedding, 10, file.path),
+						Promise.resolve(this.plugin.bm25Index.search(content.slice(0, 2000), 10, file.path)),
+					]);
+
+					// Convert BM25 results to SearchResult format (no chunk text available)
+					const bm25Results: SearchResult[] = bm25RawResults.map((r) => ({
+						filePath: r.filePath,
+						noteTitle: r.title,
+						heading: "",
+						text: "",
+						score: r.score / 10,
+					}));
+
+					// Phase 2B: RRF fusion
+					let fusedResults = reciprocalRankFusion(denseResults, bm25Results);
+
+					// Phase 3A: graph-aware score boost
+					fusedResults = applyGraphBoost(this.app, file, fusedResults);
+
+					const existingFiles = new Set(this.app.vault.getMarkdownFiles().map((f) => f.path));
+					const validResults = fusedResults.filter((r) => existingFiles.has(r.filePath)).slice(0, 5);
+
+					console.debug(`[DeepNotes] Hybrid search: ${denseResults.length} dense + ${bm25Results.length} BM25 → ${validResults.length} fused`, validResults);
 					if (validResults.length > 0) {
 						relatedContext = validResults;
 					}
@@ -213,11 +280,16 @@ export class DeepNotesView extends ItemView {
 				console.warn("Cross-topic search failed, generating without context:", e);
 			}
 
+			this.flippedCards.clear();
 			this.items = await generateDeepNotesQuestions(
 				enrichedContent,
 				this.plugin.settings,
 				systemPrompt,
-				relatedContext
+				relatedContext,
+				undefined,
+				this.plugin.settings.studyMode,
+				file.path,
+				this.plugin.geminiCacheManager
 			);
 
 			// Filter out cross-topic questions if no related notes were provided
@@ -689,6 +761,23 @@ ${noteContent}`;
 		const header = container.createDiv({ cls: "deep-notes-header" });
 		header.createEl("h4", { text: noteName });
 
+		const modeRow = header.createDiv({ cls: "deep-notes-mode-row" });
+		const modeSelect = modeRow.createEl("select", { cls: "deep-notes-mode-select" });
+		const modeOptions: Array<{ value: DeepNotesStudyMode; label: string }> = [
+			{ value: "socratic", label: "Socratic" },
+			{ value: "active-recall", label: "MCQ" },
+			{ value: "feynman", label: "Feynman" },
+			{ value: "flashcard", label: "Flashcards" },
+		];
+		for (const m of modeOptions) {
+			const opt = modeSelect.createEl("option", { value: m.value, text: m.label });
+			if (this.plugin.settings.studyMode === m.value) opt.selected = true;
+		}
+		modeSelect.addEventListener("change", async () => {
+			this.plugin.settings.studyMode = modeSelect.value as DeepNotesStudyMode;
+			await this.plugin.saveSettings();
+		});
+
 		if (this.loading) {
 			container.createDiv({
 				cls: "deep-notes-loading",
@@ -793,6 +882,15 @@ ${noteContent}`;
 			void this.triggerEvaluation();
 		});
 
+		// Export button for flashcard mode
+		if (this.plugin.settings.studyMode === "flashcard" && this.items.length > 0) {
+			const exportBtn = container.createEl("button", {
+				text: "Export to Markdown",
+				cls: "deep-notes-generate-btn deep-notes-export-btn",
+			});
+			exportBtn.addEventListener("click", () => { void this.exportFlashcards(); });
+		}
+
 		// Render question/suggestion cards
 		this.renderQuestionList(this.items, container);
 
@@ -827,6 +925,23 @@ ${noteContent}`;
 	}
 
 	private renderQuestionCard(item: DeepNotesItem, container: HTMLElement, idx: number, depth: number, rootIndex: number): void {
+		const mode = this.plugin.settings.studyMode;
+
+		if (mode === "active-recall" && item.options && item.options.length > 0) {
+			this.renderMCQCard(item, container, idx, rootIndex);
+			return;
+		}
+
+		if (mode === "flashcard") {
+			this.renderFlashcardCard(item, container, idx, rootIndex);
+			return;
+		}
+
+		// Socratic and Feynman: textarea-based response
+		this.renderTextareaCard(item, container, idx, depth, rootIndex);
+	}
+
+	private renderTextareaCard(item: DeepNotesItem, container: HTMLElement, idx: number, depth: number, rootIndex: number): void {
 		const color = HIGHLIGHT_COLORS[rootIndex % HIGHLIGHT_COLORS.length];
 		// If depth > 0, make it slightly indented or distinct
 		const card = container.createDiv({
@@ -933,6 +1048,104 @@ ${noteContent}`;
 		if (item.subItems && item.subItems.length > 0) {
 			const subContainer = container.createDiv({ cls: "deep-notes-sub-questions" });
 			this.renderQuestionList(item.subItems, subContainer, depth + 1, rootIndex);
+		}
+	}
+
+	private renderMCQCard(item: DeepNotesItem, container: HTMLElement, idx: number, rootIndex: number): void {
+		const color = HIGHLIGHT_COLORS[rootIndex % HIGHLIGHT_COLORS.length];
+		const card = container.createDiv({ cls: "deep-notes-card" });
+		card.setCssProps({ "--card-border-color": color.border });
+		card.addClass("deep-notes-card-bordered");
+
+		const headerRow = card.createDiv({ cls: "deep-notes-card-header" });
+		headerRow.createEl("span", { text: "Multiple choice", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
+
+		card.createEl("p", { text: item.text, cls: "deep-notes-text" });
+
+		const optionsContainer = card.createDiv({ cls: "deep-notes-mcq-options" });
+		const letters = ["A", "B", "C", "D"];
+
+		for (let i = 0; i < (item.options?.length ?? 0); i++) {
+			const option = item.options![i];
+			const optRow = optionsContainer.createDiv({ cls: "deep-notes-mcq-option" });
+			const radio = optRow.createEl("input", {
+				type: "radio",
+				cls: "deep-notes-mcq-radio",
+				attr: { name: `mcq-${idx}`, value: option },
+			});
+			if (item.userResponse === option) radio.checked = true;
+			radio.addEventListener("change", () => {
+				item.userResponse = option;
+				this.saveCurrentStateToCache();
+			});
+			optRow.createEl("label", { text: `${letters[i]}. ${option}`, cls: "deep-notes-mcq-label" });
+		}
+
+		// Show correct answer if user already answered
+		if (item.userResponse && item.correctOption) {
+			const isCorrect = item.userResponse === item.correctOption;
+			card.createEl("p", {
+				text: isCorrect ? "Correct!" : `Incorrect — correct answer: ${item.correctOption}`,
+				cls: `deep-notes-mcq-result ${isCorrect ? "mcq-correct" : "mcq-incorrect"}`,
+			});
+		}
+	}
+
+	private renderFlashcardCard(item: DeepNotesItem, container: HTMLElement, idx: number, rootIndex: number): void {
+		const color = HIGHLIGHT_COLORS[rootIndex % HIGHLIGHT_COLORS.length];
+		const card = container.createDiv({ cls: "deep-notes-card deep-notes-flashcard" });
+		card.setCssProps({ "--card-border-color": color.border });
+		card.addClass("deep-notes-card-bordered");
+
+		const isFlipped = this.flippedCards.has(idx);
+
+		if (!isFlipped) {
+			const front = card.createDiv({ cls: "deep-notes-flashcard-face" });
+			front.createEl("span", { text: "Front", cls: "deep-notes-badge deep-notes-badge-suggestion" });
+			front.createEl("p", { text: item.text, cls: "deep-notes-text" });
+		} else {
+			const back = card.createDiv({ cls: "deep-notes-flashcard-face" });
+			back.createEl("span", { text: "Back", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
+			back.createEl("p", { text: item.sampleAnswer || "(no answer)", cls: "deep-notes-text" });
+		}
+
+		const flipBtn = card.createEl("button", {
+			text: isFlipped ? "Show front" : "Reveal answer",
+			cls: "deep-notes-generate-btn deep-notes-flip-btn",
+		});
+		flipBtn.addEventListener("click", () => {
+			if (this.flippedCards.has(idx)) {
+				this.flippedCards.delete(idx);
+			} else {
+				this.flippedCards.add(idx);
+			}
+			this.render();
+		});
+	}
+
+	private async exportFlashcards(): Promise<void> {
+		const file = this.app.workspace.getActiveFile();
+		if (!file || this.items.length === 0) return;
+
+		const cards = this.items
+			.map((item) => `#flashcard\n${item.text}\n??\n${item.sampleAnswer || ""}`)
+			.join("\n\n");
+
+		const parentPath = file.parent?.path;
+		const exportPath = parentPath && parentPath !== "/"
+			? `${parentPath}/${file.basename} Flashcards.md`
+			: `${file.basename} Flashcards.md`;
+
+		try {
+			const existing = this.app.vault.getAbstractFileByPath(exportPath);
+			if (existing instanceof TFile) {
+				await this.app.vault.modify(existing, `# Flashcards: ${file.basename}\n\n${cards}`);
+			} else {
+				await this.app.vault.create(exportPath, `# Flashcards: ${file.basename}\n\n${cards}`);
+			}
+			new Notice(`Flashcards exported to ${exportPath}`);
+		} catch (e) {
+			new Notice(`Export failed: ${e}`);
 		}
 	}
 
