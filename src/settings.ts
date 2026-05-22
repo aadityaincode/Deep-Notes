@@ -11,6 +11,8 @@ import type { QASession } from "./history";
 import type DeepNotesPlugin from "./main";
 
 
+export type DeepNotesStudyMode = "socratic" | "active-recall" | "feynman" | "flashcard";
+
 export interface DeepNotesSettings {
 	provider: AIProvider;
 	geminiApiKey: string;
@@ -26,6 +28,7 @@ export interface DeepNotesSettings {
 	embeddingProvider: EmbeddingProvider;
 	ollamaEmbeddingModel: string;
 	history: QASession[];
+	studyMode: DeepNotesStudyMode;
 }
 
 
@@ -44,6 +47,7 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	embeddingProvider: "gemini",
 	ollamaEmbeddingModel: "nomic-embed-text",
 	history: [],
+	studyMode: "socratic",
 };
 
 export class DeepNotesSettingTab extends PluginSettingTab {
@@ -58,7 +62,25 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		new Setting(containerEl).setName("Study mode").setHeading();
 
+		new Setting(containerEl)
+			.setName("Study mode")
+			.setDesc("Choose how questions are generated for your notes.")
+			.addDropdown((dropdown) => {
+				dropdown.addOption("socratic", "Socratic depth");
+				dropdown.addOption("active-recall", "Active recall (MCQ)");
+				dropdown.addOption("feynman", "Feynman explainer");
+				dropdown.addOption("flashcard", "Flashcard deck");
+				dropdown
+					.setValue(this.plugin.settings.studyMode)
+					.onChange(async (value) => {
+						this.plugin.settings.studyMode = value as DeepNotesStudyMode;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl).setName("AI provider").setHeading();
 
 		// --- AI Provider ---
 		new Setting(containerEl)

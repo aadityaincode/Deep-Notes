@@ -8,12 +8,16 @@ import {
 import { DeepNotesView } from "./view";
 import { VaultVectorStore } from "./vectorStore";
 import { VaultIndexer } from "./indexer";
+import { BM25Index } from "./bm25";
 import { deepNotesHighlightField } from "./highlights";
+import { GeminiCacheManager } from "./ai";
 
 export default class DeepNotesPlugin extends Plugin {
 	settings: DeepNotesSettings = DEFAULT_SETTINGS;
 	vectorStore!: VaultVectorStore;
 	indexer!: VaultIndexer;
+	bm25Index!: BM25Index;
+	geminiCacheManager!: GeminiCacheManager;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -26,8 +30,12 @@ export default class DeepNotesPlugin extends Plugin {
 			: "";
 		const fullPluginDir = `${vaultBasePath}/${pluginDir}`;
 		this.vectorStore = new VaultVectorStore(fullPluginDir);
+		this.bm25Index = new BM25Index();
+		this.geminiCacheManager = new GeminiCacheManager();
 		await this.vectorStore.initialize();
-		this.indexer = new VaultIndexer(this, this.vectorStore);
+		this.indexer = new VaultIndexer(this, this.vectorStore, this.bm25Index);
+		// Warm BM25 index from vault files in the background (no API calls)
+		setTimeout(() => { void this.indexer.warmBM25Index(); }, 3000);
 
 		this.registerView(VIEW_TYPE_DEEP_NOTES, (leaf) => new DeepNotesView(leaf, this));
 
@@ -143,6 +151,7 @@ export default class DeepNotesPlugin extends Plugin {
 			this.app.vault.on("delete", (file) => {
 				if (file instanceof TFile && file.extension === "md") {
 					void this.vectorStore.removeNote(file.path);
+					this.bm25Index.removeDocument(file.path);
 				}
 			})
 		);
