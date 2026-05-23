@@ -53,6 +53,40 @@ Deep Notes is a professional, production-ready Obsidian plugin designed to act a
 
 ![Spaced Repetition Integration Example](./assets/feature7.png)
 
+### Multi-Mode Study Suite
+- Switch between four learning modalities from the sidebar header without leaving the view:
+  1. **Socratic Depth** (default): probing questions with recursive follow-ups.
+  2. **Active Recall (MCQ)**: six multiple-choice questions with A–D options and instant exact-match scoring.
+  3. **Feynman Explainer**: challenges you to explain the note's core concept in plain language a non-expert could understand.
+  4. **Flashcard Deck**: generates eight front/back cards with a one-click Markdown export in Anki-compatible `??` format.
+
+### LLM-as-Judge Evaluation
+- Replaces embedding cosine similarity grading with parallel LLM calls for all answered questions simultaneously.
+- Returns a correct, partial, or incorrect rating with a short explanation per question.
+- Multiple-choice answers are scored by exact option match, bypassing the LLM call entirely.
+- Falls back to cosine similarity scoring when no API key is available.
+
+### Hybrid Retrieval Engine
+- Runs dense vector search and BM25 keyword search in parallel at query time.
+- Merges both result sets with Reciprocal Rank Fusion (RRF) before selecting context.
+- Applies Obsidian wikilink graph boosts post-fusion: explicitly linked notes score ×1.20, backlinked notes score ×1.10.
+- BM25 index warms from all vault files on plugin load with no API calls.
+
+### TurboQuant Vector Compression
+- Compresses float32 embeddings to int8 using random sign rotation and Lloyd-Max scalar quantization.
+- Reduces in-memory vector storage by 4× with less than 1% cosine similarity loss.
+- Search uses integer dot products, approximately 4× faster than float arithmetic on the same hardware.
+
+### Incremental Vault Indexing
+- Computes a content hash per chunk at index time and skips re-embedding unchanged paragraphs on subsequent saves.
+- Removes stale chunks automatically when a note's paragraph count decreases.
+- Reduces redundant API embedding calls on large vaults with frequent small edits.
+
+### Gemini Context Caching
+- Creates a 15-minute server-side context cache for the active note on first question generation.
+- Subsequent calls in the same session reference the cache instead of resending the full note, reducing input token cost by up to 90%.
+- Falls back transparently to standard calls for notes below Gemini's minimum caching token threshold.
+
 ---
 
 ## Installation
