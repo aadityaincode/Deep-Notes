@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 import type { SearchResult } from "./vectorStore";
 import type { ImagePayload } from "./ocr";
-import type { DeepNotesSettings } from "./settings";
+import type { DeepNotesSettings, DeepNotesStudyMode } from "./settings";
 import { getEmbedding } from "./embeddings";
 
 // API response types
@@ -26,6 +26,8 @@ export interface DeepNotesItem {
 	sampleAnswerEmbedding?: number[];
 	subItems?: DeepNotesItem[];
 	userResponse?: string;
+	options?: string[];
+	correctOption?: string;
 }
 
 export interface EvaluationFeedback {
@@ -41,13 +43,130 @@ export interface EvaluationResult {
 	summary: string;
 }
 
+interface GeminiCacheEntry {
+	filePath: string;
+	cacheName: string;
+	expiresAt: number;
+}
+
+export class GeminiCacheManager {
+	private activeCache: GeminiCacheEntry | null = null;
+
+	async getOrCreateCache(
+		filePath: string,
+		noteContent: string,
+		systemPrompt: string,
+		model: string,
+		apiKey: string
+	): Promise<string | null> {
+		const now = Date.now();
+		if (
+			this.activeCache &&
+			this.activeCache.filePath === filePath &&
+			this.activeCache.expiresAt > now
+		) {
+			return this.activeCache.cacheName;
+		}
+
+		const ttlSeconds = 900;
+		const url = `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${apiKey}`;
+
+		try {
+			const response = await requestUrl({
+				url,
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					model: `models/${model}`,
+					ttl: `${ttlSeconds}s`,
+					systemInstruction: { parts: [{ text: systemPrompt }] },
+					contents: [{ role: "user", parts: [{ text: noteContent }] }],
+				}),
+			});
+
+			if (response.status !== 200) {
+				console.debug(`[DeepNotes] Cache creation skipped (${response.status}): content may be below minimum token threshold`);
+				return null;
+			}
+
+			const data = response.json as { name?: string };
+			if (!data.name) return null;
+
+			this.activeCache = { filePath, cacheName: data.name, expiresAt: now + ttlSeconds * 1000 };
+			console.debug(`[DeepNotes] Gemini context cache created: ${data.name}`);
+			return data.name;
+		} catch {
+			return null;
+		}
+	}
+
+	invalidate(): void {
+		this.activeCache = null;
+	}
+}
+
+export const STUDY_MODE_SYSTEM_PROMPTS: Record<DeepNotesStudyMode, string> = {
+	"socratic": "", // Caller provides the user's custom system prompt
+	"active-recall": `You are a quiz generator. Create exactly 6 multiple-choice questions that test specific facts, definitions, and concepts from the provided note. Each question must have exactly 4 answer choices as complete sentences. Output a JSON array of items.`,
+	"feynman": `You are a Feynman technique tutor. Identify the single most complex or abstract concept from the provided note. Generate exactly 1 challenge asking the user to explain it in plain language a 10-year-old could understand, without using jargon. Output a JSON array with 1 item.`,
+	"flashcard": `You are an Anki flashcard creator. Generate exactly 8 flashcard pairs that cover the most important concepts, definitions, and relationships from the provided note. The "text" field is the front (question/prompt), and "sample_answer" is the back (answer). Output a JSON array of items.`,
+};
+
+const SOCRATIC_SCHEMA = {
+	type: "ARRAY",
+	items: {
+		type: "OBJECT",
+		properties: {
+			type: { type: "STRING", enum: ["knowledge-expansion", "suggestion", "cross-topic"] },
+			text: { type: "STRING" },
+			sample_answer: { type: "STRING" },
+			source_excerpt: { type: "STRING" },
+			sourceNote: { type: "STRING" },
+		},
+		required: ["type", "text", "sample_answer", "source_excerpt"],
+	},
+};
+
+const ACTIVE_RECALL_SCHEMA = {
+	type: "ARRAY",
+	items: {
+		type: "OBJECT",
+		properties: {
+			type: { type: "STRING", enum: ["knowledge-expansion"] },
+			text: { type: "STRING" },
+			options: { type: "ARRAY", items: { type: "STRING" } },
+			correct_option: { type: "STRING" },
+			sample_answer: { type: "STRING" },
+			source_excerpt: { type: "STRING" },
+		},
+		required: ["type", "text", "options", "correct_option", "sample_answer"],
+	},
+};
+
+const FLASHCARD_SCHEMA = {
+	type: "ARRAY",
+	items: {
+		type: "OBJECT",
+		properties: {
+			type: { type: "STRING", enum: ["suggestion"] },
+			text: { type: "STRING" },
+			sample_answer: { type: "STRING" },
+			source_excerpt: { type: "STRING" },
+		},
+		required: ["type", "text", "sample_answer"],
+	},
+};
+
 // Generates Deep Notes questions using the selected AI provider
 export async function generateDeepNotesQuestions(
 	noteContent: string,
 	settings: DeepNotesSettings,
 	systemPrompt: string,
 	relatedContext?: SearchResult[],
-	images?: ImagePayload[]
+	images?: ImagePayload[],
+	studyMode?: DeepNotesStudyMode,
+	filePath?: string,
+	cacheManager?: GeminiCacheManager
 ): Promise<DeepNotesItem[]> {
 	let userMessage = noteContent;
 
@@ -67,13 +186,43 @@ export async function generateDeepNotesQuestions(
 		apiKey = settings.geminiApiKey;
 	}
 
+	const mode = studyMode ?? "socratic";
+	const effectiveSystemPrompt = mode === "socratic"
+		? systemPrompt
+		: STUDY_MODE_SYSTEM_PROMPTS[mode];
+
+	const geminiSchema = mode === "active-recall"
+		? ACTIVE_RECALL_SCHEMA
+		: mode === "flashcard"
+			? FLASHCARD_SCHEMA
+			: SOCRATIC_SCHEMA;
+
+	// Phase 5A: try Gemini context caching for large note contexts
+	let geminiCacheName: string | null = null;
+	if (provider === "gemini" && cacheManager && filePath && apiKey) {
+		geminiCacheName = await cacheManager.getOrCreateCache(
+			filePath,
+			noteContent,
+			effectiveSystemPrompt,
+			settings.model,
+			apiKey
+		);
+	}
+
 	// Call the appropriate AI provider
 	switch (provider) {
 		case "gemini":
-			content = await callGemini(userMessage, apiKey, settings.model, systemPrompt, imgs);
+			if (geminiCacheName) {
+				const generationRequest = relatedContext && relatedContext.length > 0
+					? `Using the note above and these related concepts:\n${relatedContext.map((r) => `- From "${r.noteTitle}": ${r.text}`).join("\n")}\n\nGenerate questions as specified in the system instruction.`
+					: "Generate questions for this note as specified in the system instruction.";
+				content = await callGeminiCached(generationRequest, apiKey, settings.model, geminiCacheName, geminiSchema);
+			} else {
+				content = await callGemini(userMessage, apiKey, settings.model, effectiveSystemPrompt, imgs, geminiSchema);
+			}
 			break;
 		case "ollama":
-			content = await callOllama(userMessage, settings.model, systemPrompt, settings.ollamaBaseUrl, imgs);
+			content = await callOllama(userMessage, settings.model, effectiveSystemPrompt, settings.ollamaBaseUrl, imgs);
 			break;
 	}
 
@@ -339,7 +488,18 @@ function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
 					? item.relatedNote
 					: undefined;
 
-	return { type, text, sourceExcerpt, sourceNote, sampleAnswer };
+	const options = Array.isArray(item.options)
+		? (item.options as string[]).filter((o) => typeof o === "string")
+		: undefined;
+
+	const correctOption =
+		typeof item.correct_option === "string"
+			? item.correct_option
+			: typeof item.correctOption === "string"
+				? item.correctOption
+				: undefined;
+
+	return { type, text, sourceExcerpt, sourceNote, sampleAnswer, options, correctOption };
 }
 
 function extractTextFieldsFromJsonLikeText(content: string): DeepNotesItem[] {
@@ -406,7 +566,8 @@ async function callGemini(
 	apiKey: string,
 	model: string,
 	systemPrompt: string,
-	images?: ImagePayload[]
+	images?: ImagePayload[],
+	schema?: object
 ): Promise<string> {
 	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -438,7 +599,10 @@ async function callGemini(
 					parts,
 				},
 			],
-			generationConfig: { temperature: 0.7 },
+			generationConfig: {
+				temperature: 0.4,
+				...(schema ? { responseMimeType: "application/json", responseSchema: schema } : {}),
+			},
 		}),
 	});
 
@@ -449,64 +613,194 @@ async function callGemini(
 	return (response.json as GeminiResponse).candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
+async function callGeminiCached(
+	generationPrompt: string,
+	apiKey: string,
+	model: string,
+	cacheName: string,
+	schema?: object
+): Promise<string> {
+	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+	const response = await requestUrl({
+		url,
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			cachedContent: cacheName,
+			contents: [{ role: "user", parts: [{ text: generationPrompt }] }],
+			generationConfig: {
+				temperature: 0.4,
+				...(schema ? { responseMimeType: "application/json", responseSchema: schema } : {}),
+			},
+		}),
+	});
+
+	if (response.status !== 200) {
+		throw new Error(`Gemini cached API error (${response.status}): ${response.text}`);
+	}
+
+	return (response.json as GeminiResponse).candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
+async function evaluateWithLLM(
+	question: string,
+	sampleAnswer: string | undefined,
+	userResponse: string,
+	settings: DeepNotesSettings
+): Promise<{ rating: "correct" | "partial" | "incorrect"; score: number; explanation: string }> {
+	if (!sampleAnswer || !userResponse.trim()) {
+		return { rating: "incorrect", score: 0, explanation: "No response provided." };
+	}
+
+	const prompt = `You are grading a student's answer. Be concise.
+
+Question: ${question}
+Ideal Answer: ${sampleAnswer}
+Student's Answer: ${userResponse}
+
+Rate as "correct" (covers key points), "partial" (partially correct), or "incorrect" (wrong/off-topic).
+Output JSON only: {"rating": "correct|partial|incorrect", "score": 0-100, "explanation": "1-2 sentences"}`;
+
+	try {
+		if (settings.provider === "gemini") {
+			const raw = await callGemini(prompt, settings.geminiApiKey, settings.model, "You are a concise grader.", undefined, {
+				type: "OBJECT",
+				properties: {
+					rating: { type: "STRING", enum: ["correct", "partial", "incorrect"] },
+					score: { type: "NUMBER" },
+					explanation: { type: "STRING" },
+				},
+				required: ["rating", "score", "explanation"],
+			});
+			const parsed = JSON.parse(raw) as { rating: "correct" | "partial" | "incorrect"; score: number; explanation: string };
+			return parsed;
+		} else if (settings.provider === "ollama") {
+			const raw = await callOllama(prompt, settings.model, "You are a concise grader. Output only JSON.", settings.ollamaBaseUrl);
+			try {
+				return JSON.parse(raw.replace(/```json|```/gi, "").trim()) as { rating: "correct" | "partial" | "incorrect"; score: number; explanation: string };
+			} catch {
+				return { rating: "partial", score: 50, explanation: "Evaluation unavailable." };
+			}
+		}
+	} catch {
+		// Graceful fallback
+	}
+	return { rating: "partial", score: 50, explanation: "Evaluation unavailable." };
+}
+
 export async function evaluateResponses(
 	noteContent: string,
 	items: DeepNotesItem[],
 	userResponses: string[],
 	settings: DeepNotesSettings
 ): Promise<EvaluationResult> {
-	const feedback: EvaluationFeedback[] = [];
-	let totalScore = 0;
-	let validResponsesCount = 0;
+	const provider = settings.provider;
+	const hasApiKey = provider === "ollama" || !!settings.geminiApiKey;
 
-	for (let i = 0; i < items.length; i++) {
-		const item = items[i];
-		const response = userResponses[i] || "";
-		let similarityScore = 0;
-		let rating: "correct" | "partial" | "incorrect" = "incorrect";
-		let explanation = "No response provided.";
+	// Collect all (item, response) pairs that have a response
+	const evaluationTasks = items.map((item, i) => ({
+		item,
+		response: userResponses[i] || "",
+		index: i,
+	}));
 
-		// Calculate similarity if we have both embeddings
-		if (item.sampleAnswerEmbedding && response.trim().length > 3) {
-			try {
-				const userEmbedding = await getEmbedding(response, settings);
-				if (userEmbedding && userEmbedding.length > 0) {
-					similarityScore = cosineSimilarity(item.sampleAnswerEmbedding, userEmbedding);
+	let feedback: EvaluationFeedback[];
+
+	if (hasApiKey && evaluationTasks.some((t) => t.response.trim().length > 3)) {
+		// Phase 4C: LLM-as-Judge evaluation (all questions in parallel)
+		const results = await Promise.all(
+			evaluationTasks.map(async ({ item, response }) => {
+				// MCQ: score by exact match against correctOption
+				if (item.options && item.correctOption) {
+					const isCorrect = response.trim() === item.correctOption.trim();
+					return {
+						question: item.text,
+						rating: isCorrect ? "correct" as const : "incorrect" as const,
+						explanation: isCorrect ? "Correct!" : `The correct answer was: ${item.correctOption}`,
+						suggestedAnswer: item.correctOption,
+					};
 				}
-			} catch (e) {
-				console.warn("Deep Notes: Failed to generate embedding for user response", e);
-			}
-		}
 
-		// Grading Logic (Pure Vector Similarity)
-		if (response.trim().length > 3) {
-			const similarityPercent = Math.round(similarityScore * 100);
-			totalScore += similarityPercent;
+				if (response.trim().length <= 3) {
+					return {
+						question: item.text,
+						rating: "incorrect" as const,
+						explanation: "No response provided.",
+						suggestedAnswer: item.sampleAnswer,
+					};
+				}
+				const judgment = await evaluateWithLLM(item.text, item.sampleAnswer, response, settings);
+				return {
+					question: item.text,
+					rating: judgment.rating,
+					explanation: judgment.explanation,
+					suggestedAnswer: item.sampleAnswer,
+				};
+			})
+		);
+		feedback = results;
+	} else {
+		// Fallback: cosine similarity grading
+		feedback = await Promise.all(
+			evaluationTasks.map(async ({ item, response }) => {
+				// MCQ: score by exact match against correctOption
+				if (item.options && item.correctOption) {
+					const isCorrect = response.trim() === item.correctOption.trim();
+					return {
+						question: item.text,
+						rating: isCorrect ? "correct" as const : "incorrect" as const,
+						explanation: isCorrect ? "Correct!" : `The correct answer was: ${item.correctOption}`,
+						suggestedAnswer: item.correctOption,
+					};
+				}
 
-			// We keep the rating string for UI color coding, but the score is now the raw percentage
-			if (similarityScore >= 0.85) {
-				rating = "correct";
-			} else if (similarityScore >= 0.70) {
-				rating = "partial";
-			} else {
-				rating = "incorrect";
-			}
+				if (response.trim().length <= 3) {
+					return {
+						question: item.text,
+						rating: "incorrect" as const,
+						explanation: "No response provided.",
+						suggestedAnswer: item.sampleAnswer,
+					};
+				}
 
-			explanation = `Similarity: ${similarityPercent}%`;
-			validResponsesCount++;
-		} else {
-			explanation = "No response provided.";
-		}
+				let similarityScore = 0;
+				if (item.sampleAnswerEmbedding) {
+					try {
+						const userEmbedding = await getEmbedding(response, settings);
+						if (userEmbedding && userEmbedding.length > 0) {
+							similarityScore = cosineSimilarity(item.sampleAnswerEmbedding, userEmbedding);
+						}
+					} catch (e) {
+						console.warn("Deep Notes: Failed to generate embedding for user response", e);
+					}
+				}
 
-		feedback.push({
-			question: item.text,
-			rating,
-			explanation,
-			suggestedAnswer: item.sampleAnswer // Include the sample answer for reference
-		});
+				const pct = Math.round(similarityScore * 100);
+				const rating: "correct" | "partial" | "incorrect" =
+					similarityScore >= 0.85 ? "correct" :
+					similarityScore >= 0.70 ? "partial" : "incorrect";
+
+				return {
+					question: item.text,
+					rating,
+					explanation: `Similarity: ${pct}%`,
+					suggestedAnswer: item.sampleAnswer,
+				};
+			})
+		);
 	}
 
-	const finalScore = validResponsesCount > 0 ? Math.round(totalScore / items.length) : 0;
+	const answeredCount = evaluationTasks.filter((t) => t.response.trim().length > 3).length;
+	const scoreMap: Record<string, number> = { correct: 100, partial: 55, incorrect: 10 };
+	const totalScore = feedback.reduce((sum, fb) => {
+		if (evaluationTasks[feedback.indexOf(fb)]?.response.trim().length > 3) {
+			return sum + (scoreMap[fb.rating] ?? 0);
+		}
+		return sum;
+	}, 0);
+
+	const finalScore = answeredCount > 0 ? Math.round(totalScore / items.length) : 0;
 
 	let summary = "";
 	if (finalScore >= 90) summary = "Outstanding! You have a deep understanding of this material.";
@@ -514,11 +808,7 @@ export async function evaluateResponses(
 	else if (finalScore >= 50) summary = "Good start. Review the partial matches to deepen your understanding.";
 	else summary = "Keep practicing. Focus on the core concepts and try again.";
 
-	return {
-		score: finalScore,
-		feedback,
-		summary
-	};
+	return { score: finalScore, feedback, summary };
 }
 
 function cosineSimilarity(vecA: number[], vecB: number[]): number {

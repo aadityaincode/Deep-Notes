@@ -1,20 +1,36 @@
 import { Notice, TFile } from "obsidian";
 import type DeepNotesPlugin from "./main";
 import { VaultVectorStore } from "./vectorStore";
+import { BM25Index } from "./bm25";
 import { getEmbedding } from "./embeddings";
 
 export class VaultIndexer {
     private plugin: DeepNotesPlugin;
     private vectorStore: VaultVectorStore;
+    private bm25Index: BM25Index;
     private indexing = false;
 
-    constructor(plugin: DeepNotesPlugin, vectorStore: VaultVectorStore) {
+    constructor(plugin: DeepNotesPlugin, vectorStore: VaultVectorStore, bm25Index: BM25Index) {
         this.plugin = plugin;
         this.vectorStore = vectorStore;
+        this.bm25Index = bm25Index;
     }
 
     get isIndexing(): boolean {
         return this.indexing;
+    }
+
+    async warmBM25Index(): Promise<void> {
+        const files = this.plugin.app.vault.getMarkdownFiles();
+        for (const file of files) {
+            try {
+                const content = await this.plugin.app.vault.read(file);
+                this.bm25Index.addDocument(file.path, file.basename, content);
+            } catch {
+                // skip unreadable files
+            }
+        }
+        console.debug(`[DeepNotes] BM25 warm-up complete: ${files.length} documents`);
     }
 
     async indexVault(): Promise<void> {
@@ -51,7 +67,6 @@ export class VaultIndexer {
                     console.error(`[DeepNotes] Skipping ${file.path} due to error.`);
                 }
 
-                // Progress update every 10 notes
                 if ((indexed + failed) % 10 === 0) {
                     new Notice(`Indexing... ${indexed + failed}/${files.length - skipped} notes`);
                 }
@@ -79,13 +94,17 @@ export class VaultIndexer {
         try {
             console.debug(`[DeepNotes] Indexing: ${file.path}`);
             const content = await this.plugin.app.vault.read(file);
-            const embedFn = (text: string) =>
-                getEmbedding(text, this.plugin.settings);
-            await this.vectorStore.indexNote(file, content, embedFn);
-            console.debug(`[DeepNotes] Automatically indexed ${file.path}`);
+            const embedFn = (text: string) => getEmbedding(text, this.plugin.settings);
+            await this.vectorStore.indexNote(file, content, embedFn, this.plugin.app);
+
+            // Update BM25 index
+            this.bm25Index.removeDocument(file.path);
+            this.bm25Index.addDocument(file.path, file.basename, content);
+
+            console.debug(`[DeepNotes] Indexed ${file.path}`);
         } catch (e) {
             console.error(`[DeepNotes] Failed to index ${file.path}:`, e);
-            throw e; // Propagate error to count as failure
+            throw e;
         }
     }
 }
