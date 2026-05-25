@@ -22,12 +22,16 @@ export class VaultIndexer {
 
     async warmBM25Index(): Promise<void> {
         const files = this.plugin.app.vault.getMarkdownFiles();
-        for (const file of files) {
+        const BATCH = 20;
+        for (let i = 0; i < files.length; i++) {
             try {
-                const content = await this.plugin.app.vault.read(file);
-                this.bm25Index.addDocument(file.path, file.basename, content);
+                const content = await this.plugin.app.vault.read(files[i]);
+                this.bm25Index.addDocument(files[i].path, files[i].basename, content);
             } catch {
                 // skip unreadable files
+            }
+            if ((i + 1) % BATCH === 0) {
+                await new Promise(r => setTimeout(r, 0));
             }
         }
         console.debug(`[DeepNotes] BM25 warm-up complete: ${files.length} documents`);
