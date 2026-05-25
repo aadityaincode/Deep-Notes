@@ -4,10 +4,8 @@
   <img src="./assets/logo.png" alt="Deep Notes Logo" width="320"/>
 </p>
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
+[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-
-<!-- Add more badges as needed -->
 
 Deep Notes is a professional, production-ready Obsidian plugin designed to act as a Socratic tutor for your notes. It helps you actively recall information, connect concepts across your vault, and deepen your understanding through recursive questioning. Built for long-term use and ongoing support, Deep Notes transforms note-taking from a collection mechanic into a learning mechanic.
 
