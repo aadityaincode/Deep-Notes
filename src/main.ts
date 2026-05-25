@@ -23,19 +23,15 @@ export default class DeepNotesPlugin extends Plugin {
 		await this.loadSettings();
 
 		// Initialize vector store
-		const pluginDir = this.manifest.dir;
-		const adapter = this.app.vault.adapter;
-		const vaultBasePath = "getBasePath" in adapter
-			? (adapter as { getBasePath(): string }).getBasePath()
-			: "";
-		const fullPluginDir = `${vaultBasePath}/${pluginDir}`;
-		this.vectorStore = new VaultVectorStore(fullPluginDir);
+		const pluginDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
+		this.vectorStore = new VaultVectorStore(this.app.vault.adapter, pluginDir);
 		this.bm25Index = new BM25Index();
 		this.geminiCacheManager = new GeminiCacheManager();
 		await this.vectorStore.initialize();
 		this.indexer = new VaultIndexer(this, this.vectorStore, this.bm25Index);
-		// Warm BM25 index from vault files in the background (no API calls)
-		setTimeout(() => { void this.indexer.warmBM25Index(); }, 3000);
+		if (this.settings.bm25AutoWarm) {
+			setTimeout(() => { void this.indexer.warmBM25Index(); }, 3000);
+		}
 
 		this.registerView(VIEW_TYPE_DEEP_NOTES, (leaf) => new DeepNotesView(leaf, this));
 
@@ -47,45 +43,6 @@ export default class DeepNotesPlugin extends Plugin {
 			id: "open-view",
 			name: "Open view",
 			callback: () => { void this.activateView(); },
-		});
-
-		this.addCommand({
-			id: "check-similar-notes",
-			name: "Check similar notes for current file (debug)",
-			callback: async () => {
-				const file = this.app.workspace.getActiveFile();
-				if (!file) {
-					new Notice("No active file.");
-					return;
-				}
-
-				try {
-					new Notice(`Checking similarity for ${file.basename}...`);
-					const content = await this.app.vault.read(file);
-					const { getEmbedding } = await import("./embeddings");
-					const embedding = await getEmbedding(content, this.settings);
-
-					if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
-						new Notice("Embedding failed (empty or invalid).");
-						console.error("[DeepNotes] Invalid embedding:", embedding);
-						return;
-					}
-
-					console.debug(`[DeepNotes] Searching with embedding (dim: ${embedding.length})`);
-					const results = await this.vectorStore.search(embedding, 5, file.path);
-
-					if (results.length === 0) {
-						new Notice("No similar notes found (score > 0).");
-					} else {
-						const msg = results.map(r => `${r.noteTitle} (${(r.score).toFixed(4)})`).join("\n");
-						new Notice(`Top matches:\n${msg}`, 5000);
-						console.debug("[DeepNotes] Similarity Results:", results);
-					}
-				} catch (e) {
-					new Notice(`Error checking similarity: ${e}`);
-					console.error(e);
-				}
-			},
 		});
 
 		this.addCommand({
@@ -116,20 +73,6 @@ export default class DeepNotesPlugin extends Plugin {
 					new Notice("Index cleared. Please re-index vault.");
 				} catch (e) {
 					new Notice(`Failed to clear index: ${e}`);
-				}
-			},
-		});
-
-		this.addCommand({
-			id: "show-index-stats",
-			name: "Show semantic index stats (debug)",
-			callback: async () => {
-				try {
-					const stats = await this.vectorStore.getStats();
-					new Notice(`Index contains ${stats.totalChunks} chunks.`);
-					console.debug("[DeepNotes] Index Stats:", stats);
-				} catch (e) {
-					new Notice(`Error getting stats: ${e}`);
 				}
 			},
 		});

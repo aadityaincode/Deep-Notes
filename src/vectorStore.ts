@@ -1,6 +1,129 @@
-import { LocalIndex, MetadataTypes } from "vectra";
+import { DataAdapter, normalizePath } from "obsidian";
 import type { App, TFile } from "obsidian";
 import { buildRotationSigns, turboQuantize, int8CosineSimilarity } from "./turboQuant";
+
+// --- Lightweight LocalIndex: replaces vectra, uses Obsidian adapter for file I/O ---
+
+export type MetadataTypes = string | number | boolean | null | undefined;
+
+interface StoredItem<TMetadata extends Record<string, MetadataTypes>> {
+    id: string;
+    vector: number[];
+    metadata: TMetadata;
+}
+
+interface IndexData<TMetadata extends Record<string, MetadataTypes>> {
+    version: number;
+    marker: string;
+    items: StoredItem<TMetadata>[];
+}
+
+const INDEX_MARKER = "deep-notes-v1";
+
+class LocalIndex<TMetadata extends Record<string, MetadataTypes> = Record<string, MetadataTypes>> {
+    private readonly adapter: DataAdapter;
+    private readonly folderPath: string;
+    private readonly indexFile: string;
+    private data: IndexData<TMetadata> | null = null;
+
+    constructor(adapter: DataAdapter, folderPath: string) {
+        this.adapter = adapter;
+        this.folderPath = folderPath;
+        this.indexFile = normalizePath(`${folderPath}/index.json`);
+    }
+
+    async isIndexCreated(): Promise<boolean> {
+        if (!(await this.adapter.exists(this.indexFile))) return false;
+        try {
+            const parsed = JSON.parse(await this.adapter.read(this.indexFile)) as IndexData<TMetadata>;
+            return parsed.marker === INDEX_MARKER;
+        } catch {
+            return false;
+        }
+    }
+
+    async createIndex(): Promise<void> {
+        if (!(await this.adapter.exists(this.folderPath))) {
+            await this.adapter.mkdir(this.folderPath);
+        }
+        this.data = { version: 1, marker: INDEX_MARKER, items: [] };
+        await this.save();
+    }
+
+    async deleteIndex(): Promise<void> {
+        if (await this.adapter.exists(this.indexFile)) {
+            await this.adapter.remove(this.indexFile);
+        }
+        this.data = null;
+    }
+
+    private async load(): Promise<void> {
+        if (this.data) return;
+        const raw = await this.adapter.read(this.indexFile);
+        this.data = JSON.parse(raw) as IndexData<TMetadata>;
+    }
+
+    private async save(): Promise<void> {
+        await this.adapter.write(this.indexFile, JSON.stringify(this.data));
+    }
+
+    async insertItem(item: { vector: number[]; metadata: TMetadata }): Promise<{ id: string }> {
+        await this.load();
+        const id = crypto.randomUUID();
+        this.data!.items.push({ id, vector: item.vector, metadata: item.metadata });
+        await this.save();
+        return { id };
+    }
+
+    async deleteItem(id: string): Promise<void> {
+        await this.load();
+        this.data!.items = this.data!.items.filter(i => i.id !== id);
+        await this.save();
+    }
+
+    async listItems(): Promise<{ id: string; metadata: TMetadata }[]> {
+        await this.load();
+        return this.data!.items.map(i => ({ id: i.id, metadata: i.metadata }));
+    }
+
+    async listItemsByMetadata(filter: Partial<TMetadata>): Promise<{ id: string; metadata: TMetadata }[]> {
+        await this.load();
+        const entries = Object.entries(filter) as [string, MetadataTypes][];
+        return this.data!.items
+            .filter(i => entries.every(([k, v]) => i.metadata[k] === v))
+            .map(i => ({ id: i.id, metadata: i.metadata }));
+    }
+
+    async queryItems(
+        queryVector: number[],
+        _filter: string,
+        topK: number,
+        _options: unknown
+    ): Promise<{ item: { id: string; metadata: TMetadata }; score: number }[]> {
+        await this.load();
+        return this.data!.items
+            .map(i => ({
+                item: { id: i.id, metadata: i.metadata },
+                score: floatCosineSimilarity(queryVector, i.vector),
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, topK);
+    }
+}
+
+function floatCosineSimilarity(a: number[], b: number[]): number {
+    let dot = 0, normA = 0, normB = 0;
+    const len = Math.min(a.length, b.length);
+    for (let i = 0; i < len; i++) {
+        dot += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
+    }
+    const denom = Math.sqrt(normA) * Math.sqrt(normB);
+    return denom === 0 ? 0 : dot / denom;
+}
+
+// --- End LocalIndex ---
 
 export interface NoteChunk {
     text: string;
@@ -46,9 +169,9 @@ export class VaultVectorStore {
     // Fixed rotation signs (built once, reused for every vector)
     private readonly rotationSigns: Int8Array;
 
-    constructor(pluginDir: string) {
-        this.indexPath = `${pluginDir}/vectors`;
-        this.index = new LocalIndex(this.indexPath);
+    constructor(adapter: DataAdapter, pluginDir: string) {
+        this.indexPath = normalizePath(`${pluginDir}/vectors`);
+        this.index = new LocalIndex(adapter, this.indexPath);
         // 768 = Gemini embedding dim; use 1536 for OpenAI-compatible models
         this.rotationSigns = buildRotationSigns(768, /*seed=*/ 42);
     }

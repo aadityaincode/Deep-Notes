@@ -4,7 +4,7 @@
   <img src="./assets/logo.png" alt="Deep Notes Logo" width="320"/>
 </p>
 
-[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/buhariE/Deep-Notes)
+[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 <!-- Add more badges as needed -->
@@ -98,7 +98,7 @@ Deep Notes is a professional, production-ready Obsidian plugin designed to act a
 4. Click **Install** and then **Enable**.
 
 ### Manual Installation
-1. Download the latest release from [GitHub Releases](https://github.com/buhariE/Deep-Notes/releases).
+1. Download the latest release from [GitHub Releases](https://github.com/aadityaincode/Deep-Notes/releases).
 2. Copy `main.js`, `manifest.json`, and `styles.css` (if present) to your `.obsidian/plugins/deep-notes/` folder.
 3. Restart Obsidian and enable the plugin.
 
@@ -165,7 +165,7 @@ This project is licensed under the MIT License. See the [LICENSE](./LICENSE) fil
 
 ## Support & Authors
 
-If you encounter issues, need help, or want to provide feedback, please open an issue on [GitHub Issues](https://github.com/buhariE/Deep-Notes/issues) or contact the maintainers directly:
+If you encounter issues, need help, or want to provide feedback, please open an issue on [GitHub Issues](https://github.com/aadityaincode/Deep-Notes/issues) or contact the maintainers directly:
 
 - Aaditya Dhungana — aadityaincode@gmail.com
 - Emmanuel Buhari — manuelbuhari@gmail.com

@@ -29,6 +29,7 @@ export interface DeepNotesSettings {
 	ollamaEmbeddingModel: string;
 	history: QASession[];
 	studyMode: DeepNotesStudyMode;
+	bm25AutoWarm: boolean;
 }
 
 
@@ -48,6 +49,7 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	ollamaEmbeddingModel: "nomic-embed-text",
 	history: [],
 	studyMode: "socratic",
+	bm25AutoWarm: true,
 };
 
 export class DeepNotesSettingTab extends PluginSettingTab {
@@ -230,6 +232,18 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 
 		// --- Cross-Topic Search (Embeddings) ---
 		new Setting(containerEl).setName("Cross-topic search").setHeading();
+
+		new Setting(containerEl)
+			.setName("Auto-warm BM25 index on startup")
+			.setDesc("Index all vault files for keyword search when Obsidian loads. Disable to reduce startup file enumeration.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.bm25AutoWarm)
+					.onChange(async (value) => {
+						this.plugin.settings.bm25AutoWarm = value;
+						await this.plugin.saveSettings();
+					})
+			);
 
 		// Warning about changing providers
 		const warningDiv = containerEl.createDiv({ cls: "deep-notes-setting-warning deep-notes-setting-warning-text" });
