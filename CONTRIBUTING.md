@@ -116,17 +116,17 @@ Because Obsidian plugins cannot easily be unit-tested headlessly, you will need 
 ## 4. Project Structure
 
 A quick overview of the directories and important files:
-- **[src/](file:///Users/noahnguyen/Deep-Notes/src)**: Contains all the TypeScript source code.
-  - **[main.ts](file:///Users/noahnguyen/Deep-Notes/src/main.ts)**: Entry point that loads settings, registers commands, views, and indexes.
-  - **[ai.ts](file:///Users/noahnguyen/Deep-Notes/src/ai.ts)**: AI model communication (Gemini, Ollama, context caching, LLM-as-judge).
-  - **[view.ts](file:///Users/noahnguyen/Deep-Notes/src/view.ts)**: Sidebar view and learning suite modules (Socratic, MCQ, Feynman, Flashcards).
-  - **[vectorStore.ts](file:///Users/noahnguyen/Deep-Notes/src/vectorStore.ts)** & **[indexer.ts](file:///Users/noahnguyen/Deep-Notes/src/indexer.ts)**: Local vector database and paragraph-level vault indexing.
-  - **[turboQuant.ts](file:///Users/noahnguyen/Deep-Notes/src/turboQuant.ts)**: int8 vector compression engine.
-  - **[bm25.ts](file:///Users/noahnguyen/Deep-Notes/src/bm25.ts)**: Local keyword retrieval.
-  - **[ocr.ts](file:///Users/noahnguyen/Deep-Notes/src/ocr.ts)**: OCR & Vision logic.
-- **[styles.css](file:///Users/noahnguyen/Deep-Notes/styles.css)**: Custom styling for the Deep Notes view panel and interactive states.
-- **[manifest.json](file:///Users/noahnguyen/Deep-Notes/manifest.json)**: Plugin metadata read by Obsidian.
-- **[eslint.config.js](file:///Users/noahnguyen/Deep-Notes/eslint.config.js)**: Configures typescript-eslint and `eslint-plugin-obsidianmd` rules.
+- **[src/]**: Contains all the TypeScript source code.
+  - **[main.ts]**: Entry point that loads settings, registers commands, views, and indexes.
+  - **[ai.ts]**: AI model communication (Gemini, Ollama, context caching, LLM-as-judge).
+  - **[view.ts]**: Sidebar view and learning suite modules (Socratic, MCQ, Feynman, Flashcards).
+  - **[vectorStore.ts]** & **[indexer.ts]**: Local vector database and paragraph-level vault indexing.
+  - **[turboQuant.ts]**: int8 vector compression engine.
+  - **[bm25.ts]**: Local keyword retrieval.
+  - **[ocr.ts]**: OCR & Vision logic.
+- **[styles.css]**: Custom styling for the Deep Notes view panel and interactive states.
+- **[manifest.json]**: Plugin metadata read by Obsidian.
+- **[eslint.config.js]**: Configures typescript-eslint and `eslint-plugin-obsidianmd` rules.
 
 ---
 
@@ -155,5 +155,5 @@ Deep Notes uses various optimizations to keep LLM costs low and search fast:
 ## 6. Release Process
 
 Releases are automated via GitHub Actions:
-1. When a new tag (e.g., `1.0.2`) is pushed to the repository, it triggers the [Release Obsidian Plugin](file:///Users/noahnguyen/Deep-Notes/.github/workflows/release.yml) workflow.
+1. When a new tag (e.g., `1.0.2`) is pushed to the repository, it triggers the [Release Obsidian Plugin](/.github/workflows/release.yml) workflow.
 2. The workflow builds the plugin and attaches `main.js`, `manifest.json`, and `styles.css` to a new GitHub Release.
