@@ -773,9 +773,9 @@ ${noteContent}`;
 			const opt = modeSelect.createEl("option", { value: m.value, text: m.label });
 			if (this.plugin.settings.studyMode === m.value) opt.selected = true;
 		}
-		modeSelect.addEventListener("change", async () => {
+		modeSelect.addEventListener("change", () => {
 			this.plugin.settings.studyMode = modeSelect.value as DeepNotesStudyMode;
-			await this.plugin.saveSettings();
+			void this.plugin.saveSettings();
 		});
 
 		if (this.loading) {

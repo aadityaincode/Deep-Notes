@@ -39,7 +39,7 @@ export default defineConfig([
                     "Notion", "Evernote", "Roam Research", "Logseq", "Anki", "Reddit",
                     "VS Code", "Visual Studio Code", "IntelliJ IDEA", "WebStorm", "PyCharm",
                     // Custom brands for this plugin
-                    "Gemini", "Ollama",
+                    "Gemini", "Ollama", "MCQ",
                 ],
             }],
         },
