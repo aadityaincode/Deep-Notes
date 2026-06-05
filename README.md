@@ -167,9 +167,7 @@ If you encounter issues, need help, or want to provide feedback, please open an 
 
 - Aaditya Dhungana — aadityaincode@gmail.com
 - Emmanuel Buhari — manuelbuhari@gmail.com
-- Noah Hong Anh Khoa — noahnghgwork@gmail.com
-- Toby Allan — tobyallan00@gmail.com
-- Muhammad Zohaib Talat — zohaibtalat@gmail.com
+- Noah Nguyen — noahnghgwork@gmail.com
 
 ## Buy Us a Coffee
 
