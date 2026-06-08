@@ -167,7 +167,7 @@ Deep Notes uses various optimizations to keep LLM costs low and search fast:
 ## 6. Release Process
 
 Releases are automated via GitHub Actions:
-1. When a new tag (e.g., `1.0.3`) is pushed to the repository, it triggers the [Release Obsidian Plugin](/.github/workflows/release.yml) workflow.
+1. When a new tag (e.g., `1.1.0`) is pushed to the repository, it triggers the [Release Obsidian Plugin](/.github/workflows/release.yml) workflow.
 2. The workflow builds the plugin and attaches `main.js`, `manifest.json`, and `styles.css` to a new GitHub Release.
 
 ### Versioning

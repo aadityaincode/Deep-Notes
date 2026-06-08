@@ -1,157 +1,60 @@
 # Deep Notes
 
-<p align="center">
-  <img src="./assets/logo.png" alt="Deep Notes Logo" width="320"/>
-</p>
-
-[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-Deep Notes is a professional, production-ready Obsidian plugin designed to act as a Socratic tutor for your notes. It helps you actively recall information, connect concepts across your vault, and deepen your understanding through recursive questioning. Built for long-term use and ongoing support, Deep Notes transforms note-taking from a collection mechanic into a learning mechanic.
+**Turn your Obsidian notes into an active study session powered by AI.**
 
-## Core Features
+> 🌐 **[See it in action → deep-notes-portfolio.vercel.app](https://deep-notes-portfolio.vercel.app/)**
 
-### Socratic Questioning
-- Analyzes your current note and generates:
-  1. **Knowledge Expansion**: Probing questions to test your understanding.
-  2. **Cross-Topic Connections**: Questions linking your note to other relevant notes.
-  3. **Suggestions**: Actionable advice to improve clarity or depth.
+---
 
-![Socratic Questioning Example](./assets/feature1.png)
+## What is Deep Notes?
 
-### "Go Deeper" (Recursive Learning)
-- Select any generated question and request a follow-up based on your answer.
-- The AI analyzes your response and generates a specific follow-up question.
-- Creates a nested thread of dialogue, simulating a real tutoring session.
+Deep Notes is an Obsidian plugin that transforms your notes into an interactive learning experience. Open any note, pick a study mode, and let AI generate questions tailored to your content. Answer, get evaluated, and schedule your next review without leaving Obsidian.
 
-![Go Deeper Example](./assets/feature2.png)
+---
 
-### Active Evaluation
-- Scores your answers based on semantic similarity to ideal answers.
-- Provides specific feedback and highlights the source text in your note.
+## Study Modes
 
-![Active Evaluation Example](./assets/feature3.png)
-
-### Vault Indexing (Semantic Search)
-- Builds a local vector index of your vault for semantic search and cross-topic questions.
-- Ensures referenced notes exist, preventing broken links.
-
-![Vault Indexing Example](./assets/feature4.png)
-
-### Multimodal Support (OCR & Vision)
-- Scans images in your notes using OCR or Vision Models.
-- Parses text from Excalidraw drawings for richer context.
-
-![Multimodal Support Example1](./assets/feature5.png)
-![Multimodal Support Example2](./assets/feature6.png)
-
-
-### Spaced Repetition Integration
-- Schedules reviews based on your evaluation score, supporting long-term retention.
-
-![Spaced Repetition Integration Example](./assets/feature7.png)
-
-### Multi-Mode Study Suite
-- Switch between four learning modalities from the sidebar header without leaving the view:
-  1. **Socratic Depth** (default): probing questions with recursive follow-ups.
-  2. **Active Recall (MCQ)**: six multiple-choice questions with A–D options and instant exact-match scoring.
-  3. **Feynman Explainer**: challenges you to explain the note's core concept in plain language a non-expert could understand.
-  4. **Flashcard Deck**: generates eight front/back cards with a one-click Markdown export in Anki-compatible `??` format.
-
-### LLM-as-Judge Evaluation
-- Replaces embedding cosine similarity grading with parallel LLM calls for all answered questions simultaneously.
-- Returns a correct, partial, or incorrect rating with a short explanation per question.
-- Multiple-choice answers are scored by exact option match, bypassing the LLM call entirely.
-- Falls back to cosine similarity scoring when no API key is available.
-
-### Hybrid Retrieval Engine
-- Runs dense vector search and BM25 keyword search in parallel at query time.
-- Merges both result sets with Reciprocal Rank Fusion (RRF) before selecting context.
-- Applies Obsidian wikilink graph boosts post-fusion: explicitly linked notes score ×1.20, backlinked notes score ×1.10.
-- BM25 index warms from all vault files on plugin load with no API calls.
-
-### TurboQuant Vector Compression
-- Compresses float32 embeddings to int8 using random sign rotation and Lloyd-Max scalar quantization.
-- Reduces in-memory vector storage by 4× with less than 1% cosine similarity loss.
-- Search uses integer dot products, approximately 4× faster than float arithmetic on the same hardware.
-
-### Incremental Vault Indexing
-- Computes a content hash per chunk at index time and skips re-embedding unchanged paragraphs on subsequent saves.
-- Removes stale chunks automatically when a note's paragraph count decreases.
-- Reduces redundant API embedding calls on large vaults with frequent small edits.
-
-### Gemini Context Caching
-- Creates a 15-minute server-side context cache for the active note on first question generation.
-- Subsequent calls in the same session reference the cache instead of resending the full note, reducing input token cost by up to 90%.
-- Falls back transparently to standard calls for notes below Gemini's minimum caching token threshold.
+| Mode | Description |
+|---|---|
+| **Socratic** | AI generates open-ended questions from your note. Answer in your own words and get detailed feedback. |
+| **MCQ** | Multiple choice questions on your note content. Answer all, then get a score. |
+| **Feynman** | Explain a concept back as if teaching someone else. AI evaluates your depth and clarity. |
+| **Flashcards** | Front/back cards generated from your note. Click to flip, export to Markdown when done. |
 
 ---
 
 ## Installation
 
-### From Obsidian Community Plugins
-1. Open Obsidian Settings > **Community Plugins**.
-2. Turn off "Safe Mode".
-3. Click **Browse** and search for "Deep Notes".
-4. Click **Install** and then **Enable**.
-
-### Manual Installation
-1. Download the latest release from [GitHub Releases](https://github.com/aadityaincode/Deep-Notes/releases).
-2. Copy `main.js`, `manifest.json`, and `styles.css` (if present) to your `.obsidian/plugins/deep-notes/` folder.
-3. Restart Obsidian and enable the plugin.
-
-### Configuration
-Go to **Settings > Deep Notes** to configure your AI provider and other options.
+1. Open **Obsidian Settings** → **Community Plugins** → turn off Restricted Mode
+2. Click **Browse** and search for **Deep Notes**
+3. Click **Install**, then **Enable**
 
 ---
 
-## Configuration: Setting Up API Keys
+## Setup
 
-To use Deep Notes with cloud AI providers (Gemini), you must provide your own API keys:
+Deep Notes requires one AI provider to generate and evaluate questions:
 
-1. Open Obsidian Settings > Deep Notes.
-2. Select your preferred AI provider (Gemini or Ollama).
-3. For Gemini:
-   - Enter your API key in the corresponding field.
-   - You can obtain API keys from your provider's developer portal:
-     - [Google Gemini](https://aistudio.google.com/app/apikey)
-4. For Ollama (local), no API key is required, but you must have Ollama running on your machine.
-
-Your API keys are stored securely in your local Obsidian configuration and are never shared.
+- **Gemini** *(recommended)*: Get a free API key at [aistudio.google.com](https://aistudio.google.com/apikey) and paste it in the plugin settings
+- **Ollama** *(local/offline)*: Install [Ollama](https://ollama.com/) and pull a model (e.g. `ollama pull llama3.2`)
 
 ---
 
-## Using Ollama (Local LLM)
+## Quick Start
 
-To use Deep Notes with Ollama (local AI models):
-
-1. Download and install Ollama from the official website: [https://ollama.com/](https://ollama.com/)
-2. Start Ollama by running `ollama serve` in your terminal.
-3. In Obsidian, go to Settings > Deep Notes and select "Ollama (Local)" as your provider.
-4. Optionally, pull specific models (e.g., `ollama pull llama3.2:latest`) as needed.
-
-No API key is required for Ollama. All processing happens locally on your machine.
+1. Open any markdown note in Obsidian
+2. Open the Deep Notes panel from the sidebar
+3. Select a study mode and click **Generate Questions**
+4. Answer the questions, hit **Evaluate & Save Session**, and schedule your review
 
 ---
 
-## Usage
+## Contributing
 
-1. Open any note in Obsidian.
-2. Click the **Deep Notes icon △** or run the command `Deep Notes: Open Deep Notes View`.
-3. Click **Generate Questions** to start your learning session.
-4. Answer questions, use "Go Deeper" for follow-ups, and evaluate your answers.
-5. Schedule reviews and track your progress over time.
-
----
-
-## Contribution
-
-We welcome contributions from the community! To contribute:
-- Fork the repository and create a new branch for your feature or fix.
-- Submit a pull request with a clear description of your changes.
-- Please follow our code style and add tests where appropriate.
-
-For questions or suggestions, see the contact information in the [Support & Authors](#support--authors) section.
+Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, code style, and the PR process.
 
 ---
 
@@ -169,6 +72,8 @@ If you encounter issues, need help, or want to provide feedback, please open an 
 - Emmanuel Buhari — manuelbuhari@gmail.com
 - Noah Nguyen — noahnghgwork@gmail.com
 
+---
+
 ## Buy Us a Coffee
 
 If you enjoy Deep Notes and want to support further development, you can buy us a coffee!
@@ -179,4 +84,3 @@ If you enjoy Deep Notes and want to support further development, you can buy us 
     <img src="https://img.shields.io/badge/PayPal-0070ba?style=for-the-badge&logo=paypal&logoColor=white" alt="PayPal" />
   </a>
 </p>
-
