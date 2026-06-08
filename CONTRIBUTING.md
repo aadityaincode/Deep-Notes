@@ -35,7 +35,7 @@ We are committed to providing a welcoming, safe, and inclusive environment. Plea
 ## 2. How Can I Contribute?
 
 ### Reporting Bugs
-Before creating a bug report, please check the [existing issues](https://github.com/buhariE/Deep-Notes/issues) to see if the issue has already been reported.
+Before creating a bug report, please check the [existing issues](https://github.com/aadityaincode/Deep-Notes/issues) to see if the issue has already been reported.
 
 If you find a new bug:
 1. Open an issue on GitHub.
@@ -51,12 +51,14 @@ We welcome ideas for new features or UX improvements!
 3. Be open to feedback and discussion from the maintainers.
 
 ### Pull Requests
-Ready to submit code? Please follow these steps:
-1. **Fork** the repository and create your branch from `main` (e.g., `feature/socratic-improvement` or `fix/ocr-crash`).
-2. Make your changes, ensuring they align with our code style and linting rules.
-3. Keep your PR focused. Avoid mixing multiple unrelated fixes or features in a single PR.
-4. Write descriptive, clean commit messages.
-5. Submit the PR to the `main` branch. Document your changes and reference any related issues in the description.
+Ready to submit code? Before opening a PR, make sure you can check off everything below:
+
+- [ ] Forked the repository and created a branch from `main` (e.g., `feature/feynman-improvement` or `fix/ocr-crash`)
+- [ ] Changes are focused — no mixing of unrelated fixes or features in a single PR
+- [ ] Linter passes with no new errors (`npx eslint src/`)
+- [ ] Changes tested manually in Obsidian with at least one AI provider
+- [ ] Commit messages are descriptive and clean
+- [ ] PR description documents what changed and references any related issues
 
 ---
 
@@ -66,6 +68,12 @@ Ready to submit code? Please follow these steps:
 - [Node.js](https://nodejs.org/) (Version 18 or later is recommended)
 - [npm](https://www.npmjs.com/) installed
 - [Obsidian](https://obsidian.md/) installed for local testing
+- **At least one AI provider** configured to test question generation:
+  - **Gemini**: A [Google Gemini API key](https://aistudio.google.com/apikey) (free tier available)
+  - **Ollama**: [Ollama](https://ollama.com/) running locally with a model pulled (e.g., `ollama pull llama3.2`)
+
+> [!NOTE]
+> Without an API key or Ollama running, the plugin will load but question generation and evaluation will not work. Most features require a working AI provider to test end-to-end.
 
 ### Installation
 Clone your fork of the repository and install dependencies:
@@ -78,7 +86,7 @@ npm install --legacy-peer-deps
 > We use `--legacy-peer-deps` due to the older dependencies and specific versions of packages configured in this repository.
 
 ### Build Commands
-Our build system is powered by `esbuild` configured in [esbuild.config.mjs](file:///Users/noahnguyen/Deep-Notes/esbuild.config.mjs).
+Our build system is powered by `esbuild` configured in `esbuild.config.mjs`.
 
 - **Development Build (Watch Mode)**:
   ```bash
@@ -116,17 +124,21 @@ Because Obsidian plugins cannot easily be unit-tested headlessly, you will need 
 ## 4. Project Structure
 
 A quick overview of the directories and important files:
-- **[src/]**: Contains all the TypeScript source code.
-  - **[main.ts]**: Entry point that loads settings, registers commands, views, and indexes.
-  - **[ai.ts]**: AI model communication (Gemini, Ollama, context caching, LLM-as-judge).
-  - **[view.ts]**: Sidebar view and learning suite modules (Socratic, MCQ, Feynman, Flashcards).
-  - **[vectorStore.ts]** & **[indexer.ts]**: Local vector database and paragraph-level vault indexing.
-  - **[turboQuant.ts]**: int8 vector compression engine.
-  - **[bm25.ts]**: Local keyword retrieval.
-  - **[ocr.ts]**: OCR & Vision logic.
-- **[styles.css]**: Custom styling for the Deep Notes view panel and interactive states.
-- **[manifest.json]**: Plugin metadata read by Obsidian.
-- **[eslint.config.js]**: Configures typescript-eslint and `eslint-plugin-obsidianmd` rules.
+- **`src/`**: Contains all the TypeScript source code.
+  - **`main.ts`**: Entry point that loads settings, registers commands, views, and indexes.
+  - **`ai.ts`**: AI model communication (Gemini, Ollama, context caching, LLM-as-judge).
+  - **`view.ts`**: Sidebar view and all four learning modes:
+    - **Socratic** — open-ended questions with AI-graded written responses
+    - **MCQ** — multiple choice questions, answer all then evaluate
+    - **Feynman** — explain a concept back in your own words, AI evaluates depth
+    - **Flashcards** — click-to-flip cards, exportable to Markdown
+  - **`vectorStore.ts`** & **`indexer.ts`**: Local vector database and paragraph-level vault indexing.
+  - **`turboQuant.ts`**: int8 vector compression engine.
+  - **`bm25.ts`**: Local keyword retrieval.
+  - **`ocr.ts`**: OCR & Vision logic.
+- **`styles.css`**: Custom styling for the Deep Notes view panel and interactive states.
+- **`manifest.json`**: Plugin metadata read by Obsidian.
+- **`eslint.config.js`**: Configures typescript-eslint and `eslint-plugin-obsidianmd` rules.
 
 ---
 
@@ -137,7 +149,7 @@ We enforce strict linting to ensure quality and consistency. Run the linter befo
 ```bash
 npx eslint src/
 ```
-- **Sentence Case**: We use `eslint-plugin-obsidianmd`'s rule for sentence-case in UI strings. For example, use "Generate questions" instead of "Generate Questions".
+- **Title Case**: We use Title Case for UI button labels and headings. For example, use "Generate Questions" instead of "Generate questions".
 - **Brand Names**: Standard brand names like "Gemini" and "Ollama" are whitelisted for specific capitalization cases.
 
 ### Obsidian API Conventions
@@ -155,5 +167,12 @@ Deep Notes uses various optimizations to keep LLM costs low and search fast:
 ## 6. Release Process
 
 Releases are automated via GitHub Actions:
-1. When a new tag (e.g., `1.0.2`) is pushed to the repository, it triggers the [Release Obsidian Plugin](/.github/workflows/release.yml) workflow.
+1. When a new tag (e.g., `1.0.3`) is pushed to the repository, it triggers the [Release Obsidian Plugin](/.github/workflows/release.yml) workflow.
 2. The workflow builds the plugin and attaches `main.js`, `manifest.json`, and `styles.css` to a new GitHub Release.
+
+### Versioning
+We follow [Semantic Versioning](https://semver.org/):
+- **Patch** (`1.0.x`) — bug fixes and minor polish
+- **Minor** (`1.x.0`) — new features, backward compatible
+- **Major** (`x.0.0`) — breaking changes or significant rewrites
+
