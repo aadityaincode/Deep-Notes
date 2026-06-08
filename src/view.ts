@@ -762,21 +762,27 @@ ${noteContent}`;
 		header.createEl("h4", { text: noteName });
 
 		const modeRow = header.createDiv({ cls: "deep-notes-mode-row" });
-		const modeSelect = modeRow.createEl("select", { cls: "deep-notes-mode-select" });
+		const modePills = modeRow.createDiv({ cls: "deep-notes-mode-pills" });
 		const modeOptions: Array<{ value: DeepNotesStudyMode; label: string }> = [
 			{ value: "socratic", label: "Socratic" },
 			{ value: "active-recall", label: "MCQ" },
 			{ value: "feynman", label: "Feynman" },
 			{ value: "flashcard", label: "Flashcards" },
 		];
+		const pillButtons: HTMLButtonElement[] = [];
 		for (const m of modeOptions) {
-			const opt = modeSelect.createEl("option", { value: m.value, text: m.label });
-			if (this.plugin.settings.studyMode === m.value) opt.selected = true;
+			const pill = modePills.createEl("button", {
+				cls: "deep-notes-mode-pill" + (this.plugin.settings.studyMode === m.value ? " active" : ""),
+				text: m.label,
+			});
+			pillButtons.push(pill);
+			pill.addEventListener("click", () => {
+				pillButtons.forEach(b => b.removeClass("active"));
+				pill.addClass("active");
+				this.plugin.settings.studyMode = m.value;
+				void this.plugin.saveSettings();
+			});
 		}
-		modeSelect.addEventListener("change", () => {
-			this.plugin.settings.studyMode = modeSelect.value as DeepNotesStudyMode;
-			void this.plugin.saveSettings();
-		});
 
 		if (this.loading) {
 			container.createDiv({
@@ -820,7 +826,7 @@ ${noteContent}`;
 			});
 			const genIcon = genBtn.createSpan({ cls: "deep-notes-btn-icon" });
 			setIcon(genIcon, "lightbulb");
-			genBtn.createSpan({ text: "Generate questions" });
+			genBtn.createSpan({ text: "Generate Questions" });
 			genBtn.addEventListener("click", () => {
 				void this.triggerGeneration();
 			});

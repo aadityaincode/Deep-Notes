@@ -21,13 +21,20 @@
  * red:         #c75c5c  (error / incorrect)
  */
 
+.workspace-leaf[data-type="deep-notes-view"] .view-content {
+	background-color: #0f0820 !important;
+}
+
+.deep-notes-container-root {
+	min-height: 100%;
+	background-color: #0f0820;
+}
+
 .deep-notes-container {
 	padding: 12px;
 	position: relative;
-	background-color: transparent;
-	/* Sync with Obsidian theme */
+	background-color: #0f0820;
 	color: var(--text-normal);
-	/* Use Obsidian text color variable if available, else fallback */
 }
 
 .deep-notes-header h4 {
@@ -39,14 +46,35 @@
 	margin-bottom: 14px;
 }
 
-.deep-notes-mode-select {
-	padding: 4px 8px;
-	border-radius: 6px;
-	background-color: var(--background-modifier-form-field);
-	color: var(--text-normal);
-	border: 1px solid var(--background-modifier-border);
-	font-size: 0.9em;
+.deep-notes-mode-pills {
+	display: flex;
+	gap: 2px;
+	padding: 4px;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(192, 132, 252, 0.15);
+	border-radius: 10px;
+}
+
+.deep-notes-mode-pill {
+	flex: 1;
+	padding: 5px 8px;
+	border: none;
+	border-radius: 7px;
+	background: transparent;
+	color: #c4b5fd;
+	font-size: 0.85em;
 	cursor: pointer;
+	transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.deep-notes-mode-pill.active {
+	background: rgba(232, 121, 249, 0.15);
+	color: #e879f9;
+	box-shadow: 0 0 10px rgba(232, 121, 249, 0.22);
+}
+
+.deep-notes-mode-pill:hover:not(.active) {
+	background: rgba(255, 255, 255, 0.05);
 }
 
 /* ── Button Layout ── */
@@ -62,10 +90,18 @@
 }
 
 .deep-notes-btn-stack {
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
 	gap: 8px;
 	margin-top: 12px;
+}
+
+.deep-notes-btn-stack > .deep-notes-generate-btn:not(.deep-notes-scan-btn):not(.deep-notes-history-btn) {
+	grid-column: 1 / -1;
+	padding: 14px 20px;
+	font-size: 16px;
+	min-height: 52px;
+	justify-content: center;
 }
 
 /* ── Buttons ── */
@@ -75,21 +111,20 @@
 	width: 100%;
 	padding: 8px 16px;
 	cursor: pointer;
-	background-color: #1e1a16;
-	color: #e8e0d4;
-	border: 1px solid rgba(200, 162, 78, 0.25);
-	border-radius: 6px;
+	background-color: rgba(255, 255, 255, 0.05);
+	color: #faf5ff;
+	border: 1px solid rgba(192, 132, 252, 0.15);
+	border-radius: 8px;
 	font-size: 14px;
-	box-shadow: 0 0 6px rgba(200, 162, 78, 0.12);
+	box-shadow: none;
 	transition: box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.25s ease;
 	text-align: left;
-	/* User request */
 }
 
 .deep-notes-generate-btn:hover {
-	background-color: #2a2420;
-	border-color: rgba(212, 168, 67, 0.5);
-	box-shadow: 0 0 14px rgba(212, 168, 67, 0.25), 0 0 4px rgba(212, 168, 67, 0.1) inset;
+	background-color: rgba(255, 255, 255, 0.08);
+	border-color: rgba(192, 132, 252, 0.3);
+	box-shadow: 0 0 12px rgba(192, 132, 252, 0.15);
 }
 
 .deep-notes-icon-btn {
@@ -107,7 +142,7 @@
 .deep-notes-btn-icon svg {
 	width: 16px;
 	height: 16px;
-	color: #d4a843;
+	color: #e879f9;
 }
 
 .deep-notes-regenerate {
@@ -128,8 +163,8 @@
 .deep-notes-flowchart {
 	margin-top: 20px;
 	padding: 16px 12px;
-	background: #1e1a16;
-	border: 1px solid rgba(200, 162, 78, 0.08);
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid rgba(192, 132, 252, 0.15);
 	border-radius: 10px;
 }
 
@@ -138,9 +173,22 @@
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.8px;
-	color: #9a8e7f;
+	color: #c084fc;
 	margin: 0 0 14px 0;
-	text-align: center;
+	text-align: left;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.deep-notes-flowchart-title::before {
+	content: "›";
+	color: #c084fc;
+	font-size: 16px;
+	line-height: 12px;
+	flex-shrink: 0;
+	position: relative;
+	top: -1px;
 }
 
 .deep-notes-flow-node {
@@ -149,32 +197,32 @@
 	gap: 10px;
 	padding: 8px 10px;
 	border-radius: 8px;
-	background: rgba(255, 255, 255, 0.02);
-	border: 1px solid rgba(255, 255, 255, 0.04);
+	background: rgba(255, 255, 255, 0.08);
+	border: 1px solid rgba(192, 132, 252, 0.1);
 	transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .deep-notes-flow-node:hover {
-	background: rgba(212, 168, 67, 0.06);
-	box-shadow: 0 0 8px rgba(212, 168, 67, 0.1);
+	background: rgba(255, 255, 255, 0.11);
+	box-shadow: 0 0 8px rgba(192, 132, 252, 0.12);
 }
 
 .deep-notes-flow-icon {
 	flex-shrink: 0;
-	width: 28px;
-	height: 28px;
+	width: 32px;
+	height: 32px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border-radius: 50%;
-	background: rgba(212, 168, 67, 0.1);
-	border: 1px solid rgba(212, 168, 67, 0.25);
+	border-radius: 8px;
+	background: rgba(168, 85, 247, 0.15);
+	border: 1px solid rgba(168, 85, 247, 0.28);
 }
 
 .deep-notes-flow-icon svg {
-	width: 14px;
-	height: 14px;
-	color: #d4a843;
+	width: 15px;
+	height: 15px;
+	color: #c084fc;
 }
 
 .deep-notes-flow-text {
@@ -187,12 +235,13 @@
 .deep-notes-flow-label {
 	font-size: 13px;
 	font-weight: 600;
-	color: #e8e0d4;
+	color: #faf5ff;
 }
 
 .deep-notes-flow-desc {
 	font-size: 11px;
-	color: #9a8e7f;
+	color: #c4b5fd;
+	opacity: 0.7;
 	line-height: 1.3;
 }
 
@@ -200,7 +249,7 @@
 	width: 2px;
 	height: 12px;
 	margin: 0 auto;
-	background: linear-gradient(to bottom, rgba(212, 168, 67, 0.3), rgba(212, 168, 67, 0.06));
+	background: rgba(192, 132, 252, 0.25);
 	border-radius: 1px;
 }
 
@@ -322,10 +371,6 @@
 }
 
 /* ── Evaluate ── */
-
-.deep-notes-evaluate-btn {
-	margin-bottom: 16px;
-}
 
 /* ── Score ── */
 
@@ -547,13 +592,24 @@
 
 /* ── History ── */
 
-.deep-notes-history-btn {
-	background-color: #2a2420;
-	color: #e8e0d4;
+.deep-notes-history-btn,
+.deep-notes-scan-btn {
+	background-color: rgba(255, 255, 255, 0.05);
+	color: #c4b5fd;
+	border-color: rgba(192, 132, 252, 0.15);
+	padding: 12px 12px;
+	min-height: 44px;
+	justify-content: center;
 }
 
-.deep-notes-history-btn:hover {
-	background-color: #352e28;
+.deep-notes-history-btn:hover,
+.deep-notes-scan-btn:hover {
+	background-color: rgba(255, 255, 255, 0.08);
+}
+
+.deep-notes-history-btn .deep-notes-btn-icon svg,
+.deep-notes-scan-btn .deep-notes-btn-icon svg {
+	color: #c084fc;
 }
 
 .deep-notes-history-title {
@@ -806,12 +862,43 @@
 
 .deep-notes-clear-session-btn {
 	margin-bottom: 8px;
-	font-size: 12px;
-	padding: 4px;
+	padding: 12px 16px;
+	min-height: 44px;
+	font-size: 14px;
+	text-align: center;
+	justify-content: center;
+}
+
+.deep-notes-evaluate-btn {
+	padding: 12px 16px;
+	min-height: 44px;
+	font-size: 14px;
+	text-align: center;
+	justify-content: center;
+	margin-bottom: 16px;
+}
+
+.deep-notes-export-btn {
+	padding: 12px 16px;
+	min-height: 44px;
+	font-size: 14px;
+	text-align: center;
+	justify-content: center;
+	margin-bottom: 16px;
+	width: 100%;
+	box-sizing: border-box;
 }
 
 .deep-notes-btn-row-bottom {
 	margin-top: 16px;
+	display: flex;
+	gap: 8px;
+}
+
+.deep-notes-btn-row-bottom .deep-notes-generate-btn {
+	padding: 12px 16px;
+	min-height: 44px;
+	justify-content: center;
 }
 
 .deep-notes-deeper-btn {
