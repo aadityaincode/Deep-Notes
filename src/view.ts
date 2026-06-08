@@ -1079,7 +1079,7 @@ ${noteContent}`;
 		const btnRow = card.createDiv({ cls: "deep-notes-btn-row" });
 
 		const addBtn = btnRow.createEl("button", {
-			text: "Add to note",
+			text: "Add to Note",
 			cls: "deep-notes-add-btn deep-notes-generate-btn",
 		});
 		addBtn.addEventListener("click", () => {
@@ -1088,7 +1088,7 @@ ${noteContent}`;
 
 		// Go Deeper Button
 		const deeperBtn = btnRow.createEl("button", {
-			text: "Go deeper",
+			text: "Go Deeper",
 			cls: "deep-notes-add-btn deep-notes-generate-btn deep-notes-deeper-btn",
 		});
 
@@ -1284,7 +1284,7 @@ ${noteContent}`;
 		} catch (e) {
 			new Notice(`Error going deeper: ${e}`);
 		} finally {
-			deeperBtn.textContent = "Go deeper";
+			deeperBtn.textContent = "Go Deeper";
 			deeperBtn.disabled = false;
 		}
 	}
@@ -1482,13 +1482,39 @@ ${noteContent}`;
 		const guide = container.createDiv({ cls: "deep-notes-flowchart" });
 		guide.createEl("p", { text: "How it works", cls: "deep-notes-flowchart-title" });
 
-		const steps = [
-			{ icon: "file-text", label: "Open a note", desc: "Navigate to any markdown note" },
-			{ icon: "lightbulb", label: "Generate questions", desc: "AI reads your note and creates questions" },
-			{ icon: "pencil", label: "Answer them", desc: "Type your responses to test your understanding" },
-			{ icon: "bar-chart-2", label: "Evaluate", desc: "Get a score and feedback on your answers" },
-			{ icon: "calendar", label: "Review later", desc: "Sessions are saved and review is scheduled" },
-		];
+		const mode = this.plugin.settings.studyMode;
+
+		const stepsMap: Record<string, { icon: string; label: string; desc: string }[]> = {
+			"socratic": [
+				{ icon: "file-text", label: "Open a note", desc: "Navigate to any markdown note" },
+				{ icon: "lightbulb", label: "Generate questions", desc: "AI creates open-ended questions from your note" },
+				{ icon: "pencil", label: "Answer them", desc: "Type your responses in each text box" },
+				{ icon: "bar-chart-2", label: "Evaluate", desc: "AI scores your answers with detailed feedback" },
+				{ icon: "calendar", label: "Review later", desc: "Schedule your next session based on your score" },
+			],
+			"active-recall": [
+				{ icon: "file-text", label: "Open a note", desc: "Navigate to any markdown note" },
+				{ icon: "lightbulb", label: "Generate questions", desc: "AI creates multiple choice questions" },
+				{ icon: "list-checks", label: "Answer all", desc: "Select one option per question" },
+				{ icon: "bar-chart-2", label: "Evaluate", desc: "Submit all answers and get your total score" },
+				{ icon: "calendar", label: "Review later", desc: "Schedule your next session based on your score" },
+			],
+			"feynman": [
+				{ icon: "file-text", label: "Open a note", desc: "Navigate to any markdown note" },
+				{ icon: "lightbulb", label: "Get a prompt", desc: "AI gives you a concept from your note to explain" },
+				{ icon: "pencil", label: "Explain it back", desc: "Write it as if teaching someone with no context" },
+				{ icon: "bar-chart-2", label: "Get feedback", desc: "AI evaluates your explanation's depth and accuracy" },
+				{ icon: "calendar", label: "Review later", desc: "Schedule your next session based on your score" },
+			],
+			"flashcard": [
+				{ icon: "file-text", label: "Open a note", desc: "Navigate to any markdown note" },
+				{ icon: "lightbulb", label: "Generate cards", desc: "AI creates front/back flashcard pairs" },
+				{ icon: "repeat", label: "Flip through", desc: "Click any card to reveal the answer" },
+				{ icon: "download", label: "Export", desc: "Save your flashcards to a Markdown file" },
+			],
+		};
+
+		const steps = stepsMap[mode] ?? stepsMap["socratic"];
 
 		for (let i = 0; i < steps.length; i++) {
 			const step = steps[i];
@@ -1633,7 +1659,7 @@ ${noteContent}`;
 		const reviewDate = this.getReviewDate(result.score);
 		const dateStr = reviewDate.toISOString().split("T")[0];
 		scheduleBtn.createEl("small", {
-			text: `${ (dateStr) }`,
+			text: `ㅤㅤ${dateStr}`,
 		});
 		scheduleBtn.addEventListener("click", () => {
 			void this.scheduleReview();
