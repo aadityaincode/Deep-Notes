@@ -69,7 +69,7 @@ interface CachedSession {
 }
 
 // Global cache to persist state across view reloads/navigation
-// Key: file path
+// Key: "${filePath}::${studyMode}"
 const sessionCache = new Map<string, CachedSession>();
 
 export class DeepNotesView extends ItemView {
@@ -87,6 +87,7 @@ export class DeepNotesView extends ItemView {
 	private availableImages: ImageInfo[] = [];
 	private selectedImagePaths: Set<string> = new Set();
 	private flippedCards = new Set<number>();
+	private loadingMode: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: DeepNotesPlugin) {
 		super(leaf);
@@ -131,12 +132,15 @@ export class DeepNotesView extends ItemView {
 		return Promise.resolve();
 	}
 
+	private modeKey(filePath: string, mode?: string): string {
+		return `${filePath}::${mode ?? this.plugin.settings.studyMode}`;
+	}
+
 	private saveCurrentStateToCache(): void {
 		if (!this.lastNotePath) return;
 
-		// Only save if there's something to save
 		if (this.items.length > 0 || this.evaluationResult) {
-			sessionCache.set(this.lastNotePath, {
+			sessionCache.set(this.modeKey(this.lastNotePath), {
 				items: this.items,
 				evaluationResult: this.evaluationResult,
 				viewMode: this.viewMode,
@@ -169,7 +173,7 @@ export class DeepNotesView extends ItemView {
 		}
 
 		// Restore from cache if exists
-		const cached = sessionCache.get(file.path);
+		const cached = sessionCache.get(this.modeKey(file.path));
 		if (cached) {
 			this.items = cached.items;
 			this.evaluationResult = cached.evaluationResult;
@@ -226,6 +230,7 @@ export class DeepNotesView extends ItemView {
 		}
 
 		this.loading = true;
+		this.loadingMode = this.plugin.settings.studyMode;
 		this.loadingMessage = "Generating questions from note...";
 		this.evaluationResult = null;
 		this.viewMode = "questions";
@@ -317,16 +322,27 @@ export class DeepNotesView extends ItemView {
 			}
 
 
-			// Save to cache immediately
-			this.saveCurrentStateToCache();
+			// Save to the mode that triggered this generation
+			if (this.lastNotePath) {
+				sessionCache.set(this.modeKey(this.lastNotePath, this.loadingMode!), {
+					items: this.items,
+					evaluationResult: null,
+					viewMode: "questions",
+				});
+			}
 
 		} catch (e) {
 			new Notice(`Deep notes error: ${e instanceof Error ? e.message : e}`);
 			this.items = [];
 		} finally {
 			this.loading = false;
-			this.render();
-			this.applyQuestionHighlights();
+			const completedMode = this.loadingMode;
+			this.loadingMode = null;
+			// Only update the view if the user is still on the mode that generated
+			if (this.plugin.settings.studyMode === completedMode) {
+				this.render();
+				this.applyQuestionHighlights();
+			}
 		}
 	}
 
@@ -386,6 +402,7 @@ export class DeepNotesView extends ItemView {
 
 		this.showImagePicker = false;
 		this.loading = true;
+		this.loadingMode = this.plugin.settings.studyMode;
 		this.loadingMessage = `Loading ${this.selectedImagePaths.size} image(s)...`;
 		this.evaluationResult = null;
 		this.render();
@@ -490,7 +507,11 @@ ${noteContent}`;
 			this.items = [];
 		} finally {
 			this.loading = false;
-			this.render();
+			const completedMode = this.loadingMode;
+			this.loadingMode = null;
+			if (this.plugin.settings.studyMode === completedMode) {
+				this.render();
+			}
 		}
 	}
 
@@ -777,14 +798,39 @@ ${noteContent}`;
 			});
 			pillButtons.push(pill);
 			pill.addEventListener("click", () => {
+				if (this.plugin.settings.studyMode === m.value) return;
+
+				// Save current mode's state before switching
+				this.saveCurrentStateToCache();
+
 				pillButtons.forEach(b => b.removeClass("active"));
 				pill.addClass("active");
 				this.plugin.settings.studyMode = m.value;
 				void this.plugin.saveSettings();
+
+				// Restore cached state for the new mode, or show home page
+				if (this.lastNotePath) {
+					const cached = sessionCache.get(this.modeKey(this.lastNotePath, m.value));
+					if (cached) {
+						this.items = cached.items;
+						this.evaluationResult = cached.evaluationResult;
+						this.viewMode = cached.viewMode;
+					} else {
+						this.items = [];
+						this.evaluationResult = null;
+						this.viewMode = "questions";
+					}
+				} else {
+					this.items = [];
+					this.evaluationResult = null;
+					this.viewMode = "questions";
+				}
+
+				this.render();
 			});
 		}
 
-		if (this.loading) {
+		if (this.loading && this.loadingMode === this.plugin.settings.studyMode) {
 			container.createDiv({
 				cls: "deep-notes-loading",
 				text: this.loadingMessage || "Generating questions...",
@@ -865,7 +911,7 @@ ${noteContent}`;
 		});
 		clearBtn.addEventListener("click", () => {
 			if (this.lastNotePath) {
-				sessionCache.delete(this.lastNotePath);
+				sessionCache.delete(this.modeKey(this.lastNotePath));
 			}
 			this.items = [];
 			this.evaluationResult = null;
@@ -1099,33 +1145,30 @@ ${noteContent}`;
 
 	private renderFlashcardCard(item: DeepNotesItem, container: HTMLElement, idx: number, rootIndex: number): void {
 		const color = HIGHLIGHT_COLORS[rootIndex % HIGHLIGHT_COLORS.length];
-		const card = container.createDiv({ cls: "deep-notes-card deep-notes-flashcard" });
-		card.setCssProps({ "--card-border-color": color.border });
-		card.addClass("deep-notes-card-bordered");
 
-		const isFlipped = this.flippedCards.has(idx);
+		const wrapper = container.createDiv({ cls: "deep-notes-flashcard-wrapper" });
+		const inner = wrapper.createDiv({ cls: "deep-notes-flashcard-inner deep-notes-card-bordered" });
+		inner.setCssProps({ "--card-border-color": color.border });
+		if (this.flippedCards.has(idx)) inner.addClass("flipped");
 
-		if (!isFlipped) {
-			const front = card.createDiv({ cls: "deep-notes-flashcard-face" });
-			front.createEl("span", { text: "Front", cls: "deep-notes-badge deep-notes-badge-suggestion" });
-			front.createEl("p", { text: item.text, cls: "deep-notes-text" });
-		} else {
-			const back = card.createDiv({ cls: "deep-notes-flashcard-face" });
-			back.createEl("span", { text: "Back", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
-			back.createEl("p", { text: item.sampleAnswer || "(no answer)", cls: "deep-notes-text" });
-		}
+		const front = inner.createDiv({ cls: "deep-notes-flashcard-face deep-notes-flashcard-front" });
+		front.createEl("span", { text: "Front", cls: "deep-notes-badge deep-notes-badge-suggestion" });
+		front.createEl("p", { text: item.text, cls: "deep-notes-text" });
+		front.createEl("p", { text: "Click to reveal answer", cls: "deep-notes-flashcard-hint" });
 
-		const flipBtn = card.createEl("button", {
-			text: isFlipped ? "Show front" : "Reveal answer",
-			cls: "deep-notes-generate-btn deep-notes-flip-btn",
-		});
-		flipBtn.addEventListener("click", () => {
+		const back = inner.createDiv({ cls: "deep-notes-flashcard-face deep-notes-flashcard-back" });
+		back.createEl("span", { text: "Back", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
+		back.createEl("p", { text: item.sampleAnswer || "(no answer)", cls: "deep-notes-text" });
+		back.createEl("p", { text: "Click to flip back", cls: "deep-notes-flashcard-hint" });
+
+		wrapper.addEventListener("click", () => {
 			if (this.flippedCards.has(idx)) {
 				this.flippedCards.delete(idx);
+				inner.removeClass("flipped");
 			} else {
 				this.flippedCards.add(idx);
+				inner.addClass("flipped");
 			}
-			this.render();
 		});
 	}
 
@@ -1584,13 +1627,13 @@ ${noteContent}`;
 
 		// Schedule Review button
 		const scheduleBtn = btnStack.createEl("button", {
-			text: "Schedule review",
+			text: "Schedule Review",
 			cls: "deep-notes-generate-btn deep-notes-schedule-btn",
 		});
 		const reviewDate = this.getReviewDate(result.score);
 		const dateStr = reviewDate.toISOString().split("T")[0];
 		scheduleBtn.createEl("small", {
-			text: ` (${dateStr})`,
+			text: `${ (dateStr) }`,
 		});
 		scheduleBtn.addEventListener("click", () => {
 			void this.scheduleReview();
