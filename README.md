@@ -5,7 +5,7 @@
 
 **Turn your Obsidian notes into an active study session powered by AI.**
 
-> 🌐 **[See it in action → deepnotes.wiki](https://deepnotes.wiki)**
+> **[View the full demo at deepnotes.wiki](https://deepnotes.wiki)**
 
 ---
 
