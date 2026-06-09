@@ -5,7 +5,7 @@
 
 **Turn your Obsidian notes into an active study session powered by AI.**
 
-> 🌐 **[See it in action → deep-notes-portfolio.vercel.app](https://deep-notes-portfolio.vercel.app/)**
+> 🌐 **[See it in action → deepnotes.wiki](https://deepnotes.wiki)**
 
 ---
 
