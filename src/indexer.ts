@@ -31,7 +31,7 @@ export class VaultIndexer {
                 // skip unreadable files
             }
             if ((i + 1) % BATCH === 0) {
-                await new Promise(r => setTimeout(r, 0));
+                await new Promise(r => window.setTimeout(r, 0));
             }
         }
         console.debug(`[DeepNotes] BM25 warm-up complete: ${files.length} documents`);

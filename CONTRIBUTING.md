@@ -67,7 +67,7 @@ Ready to submit code? Before opening a PR, make sure you can check off everythin
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (Version 18 or later is recommended)
 - [npm](https://www.npmjs.com/) installed
-- [Obsidian](https://obsidian.md/) installed for local testing
+- [Obsidian](https://obsidian.md/) **1.7.2 or later** installed for local testing
 - **At least one AI provider** configured to test question generation:
   - **Gemini**: A [Google Gemini API key](https://aistudio.google.com/apikey) (free tier available)
   - **Ollama**: [Ollama](https://ollama.com/) running locally with a model pulled (e.g., `ollama pull llama3.2`)
@@ -149,8 +149,8 @@ We enforce strict linting to ensure quality and consistency. Run the linter befo
 ```bash
 npx eslint src/
 ```
-- **Title Case**: We use Title Case for UI button labels and headings. For example, use "Generate Questions" instead of "Generate questions".
-- **Brand Names**: Standard brand names like "Gemini" and "Ollama" are whitelisted for specific capitalization cases.
+- **Sentence case**: We use sentence case for all UI text — button labels, setting names, and headings. Only capitalise the first word and proper nouns. For example, use "Generate questions" instead of "Generate Questions".
+- **Brand names**: Known product names and acronyms (e.g. Gemini, Ollama, MCQ, BM25) are whitelisted in `eslint.config.js` and may keep their standard capitalisation.
 
 ### Obsidian API Conventions
 - **Clean Up Resources**: Always register events, intervals, and styles using `this.registerEvent`, `this.registerInterval`, or ensure you properly clean them up in `onunload()`. This prevents memory leaks when plugins are disabled or reloaded.

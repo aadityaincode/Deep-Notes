@@ -30,7 +30,7 @@ export default class DeepNotesPlugin extends Plugin {
 		await this.vectorStore.initialize();
 		this.indexer = new VaultIndexer(this, this.vectorStore, this.bm25Index);
 		if (this.settings.bm25AutoWarm) {
-			setTimeout(() => { void this.indexer.warmBM25Index(); }, 3000);
+			window.setTimeout(() => { void this.indexer.warmBM25Index(); }, 3000);
 		}
 
 		this.registerView(VIEW_TYPE_DEEP_NOTES, (leaf) => new DeepNotesView(leaf, this));

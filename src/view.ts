@@ -205,7 +205,7 @@ export class DeepNotesView extends ItemView {
 
 		if (excerpts.length > 0) {
 			// Small delay to let the editor settle after render
-			setTimeout(() => applyHighlights(this.app, excerpts, this.lastNotePath || undefined), 100);
+			window.setTimeout(() => applyHighlights(this.app, excerpts, this.lastNotePath || undefined), 100);
 		}
 	}
 
@@ -324,7 +324,7 @@ export class DeepNotesView extends ItemView {
 
 			// Save to the mode that triggered this generation
 			if (this.lastNotePath) {
-				sessionCache.set(this.modeKey(this.lastNotePath, this.loadingMode!), {
+				sessionCache.set(this.modeKey(this.lastNotePath, this.loadingMode), {
 					items: this.items,
 					evaluationResult: null,
 					viewMode: "questions",
@@ -1079,7 +1079,7 @@ ${noteContent}`;
 		const btnRow = card.createDiv({ cls: "deep-notes-btn-row" });
 
 		const addBtn = btnRow.createEl("button", {
-			text: "Add to Note",
+			text: "Add to note",
 			cls: "deep-notes-add-btn deep-notes-generate-btn",
 		});
 		addBtn.addEventListener("click", () => {
@@ -1088,7 +1088,7 @@ ${noteContent}`;
 
 		// Go Deeper Button
 		const deeperBtn = btnRow.createEl("button", {
-			text: "Go Deeper",
+			text: "Go deeper",
 			cls: "deep-notes-add-btn deep-notes-generate-btn deep-notes-deeper-btn",
 		});
 
@@ -1284,7 +1284,7 @@ ${noteContent}`;
 		} catch (e) {
 			new Notice(`Error going deeper: ${e}`);
 		} finally {
-			deeperBtn.textContent = "Go Deeper";
+			deeperBtn.textContent = "Go deeper";
 			deeperBtn.disabled = false;
 		}
 	}
@@ -1566,9 +1566,9 @@ ${noteContent}`;
 				(this.constructor as typeof DeepNotesView).hasShownIndexStatus = true;
 
 				// Fade out after 3 seconds
-				setTimeout(() => {
+				window.setTimeout(() => {
 					statusDiv.addClass("fading-out");
-					setTimeout(() => {
+					window.setTimeout(() => {
 						statusDiv.remove();
 					}, 500); // Wait for CSS transition
 				}, 3000);
@@ -1653,7 +1653,7 @@ ${noteContent}`;
 
 		// Schedule Review button
 		const scheduleBtn = btnStack.createEl("button", {
-			text: "Schedule Review",
+			text: "Schedule review",
 			cls: "deep-notes-generate-btn deep-notes-schedule-btn",
 		});
 		const reviewDate = this.getReviewDate(result.score);

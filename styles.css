@@ -21,8 +21,8 @@
  * red:         #c75c5c  (error / incorrect)
  */
 
-.workspace-leaf[data-type="deep-notes-view"] .view-content {
-	background-color: #0f0820 !important;
+body .workspace-leaf[data-type="deep-notes-view"] .view-content {
+	background-color: #0f0820;
 }
 
 .deep-notes-container-root {
@@ -145,20 +145,20 @@
 	color: #e879f9;
 }
 
-.deep-notes-regenerate {
+.deep-notes-container .deep-notes-regenerate {
 	min-height: 36px;
 	padding: 6px 14px;
 	font-size: 13px;
 	text-align: left;
-	border-left: 2px solid rgba(192, 132, 252, 0.35) !important;
+	border-left: 2px solid rgba(192, 132, 252, 0.35);
 	border-radius: 6px;
-	background: transparent !important;
+	background: transparent;
 	border-color: transparent;
 	color: #c4b5fd;
 }
 
-.deep-notes-regenerate:hover {
-	background: rgba(192, 132, 252, 0.07) !important;
+.deep-notes-container .deep-notes-regenerate:hover {
+	background: rgba(192, 132, 252, 0.07);
 	color: #faf5ff;
 }
 
