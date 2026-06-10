@@ -1,6 +1,6 @@
 # Deep Notes
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 **Turn your Obsidian notes into an active study session powered by AI.**
@@ -48,7 +48,7 @@ Deep Notes requires one AI provider to generate and evaluate questions:
 1. Open any markdown note in Obsidian
 2. Open the Deep Notes panel from the sidebar
 3. Select a study mode and click **Generate Questions**
-4. Answer the questions, hit **Evaluate & Save Session**, and schedule your review
+4. Answer the questions, hit **Evaluate & save session**, and schedule your review
 
 ---
 

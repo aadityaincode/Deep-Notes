@@ -133,9 +133,13 @@ A quick overview of the directories and important files:
     - **Feynman** — explain a concept back in your own words, AI evaluates depth
     - **Flashcards** — click-to-flip cards, exportable to Markdown
   - **`vectorStore.ts`** & **`indexer.ts`**: Local vector database and paragraph-level vault indexing.
+  - **`embeddings.ts`**: Embedding generation for Gemini and Ollama providers.
   - **`turboQuant.ts`**: int8 vector compression engine.
   - **`bm25.ts`**: Local keyword retrieval.
   - **`ocr.ts`**: OCR & Vision logic.
+  - **`highlights.ts`**: Editor highlight decorations for source excerpt colouring.
+  - **`history.ts`**: Session persistence — saves and loads past Q&A sessions.
+  - **`constants.ts`**: Shared constants — view type, provider lists, model defaults, and the system prompt.
 - **`styles.css`**: Custom styling for the Deep Notes view panel and interactive states.
 - **`manifest.json`**: Plugin metadata read by Obsidian.
 - **`eslint.config.js`**: Configures typescript-eslint and `eslint-plugin-obsidianmd` rules.
