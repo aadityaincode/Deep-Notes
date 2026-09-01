@@ -37,7 +37,7 @@ export const DEFAULT_SETTINGS: DeepNotesSettings = {
 	provider: "gemini",
 	geminiApiKey: "",
 	ollamaBaseUrl: "http://127.0.0.1:11434",
-	model: "gemini-2.0-flash",
+	model: "gemini-3.7-flash",
 	imageOcrEnabled: false,
 	imageOcrProvider: "ollama",
 	imageOcrVisionModel: "llava:latest",
@@ -179,7 +179,7 @@ export class DeepNotesSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName("Gemini vision model")
 				.setDesc("Fixed model for vision tasks")
-				.addText((text) => text.setValue("gemini-2.0-flash").setDisabled(true));
+				.addText((text) => text.setValue("gemini-3.7-flash").setDisabled(true));
 
 			// Ensure Gemini key is visible if not already shown in main provider
 			if (this.plugin.settings.provider !== "gemini") {

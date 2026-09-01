@@ -463,7 +463,7 @@ export class DeepNotesView extends ItemView {
 
 			// Determine which model/provider to use for VISION
 			const visionProvider = imageOcrProvider === "gemini" ? "gemini" : "ollama";
-			const visionModelName = imageOcrProvider === "gemini" ? "gemini-2.0-flash" : (imageOcrVisionModel || "llava");
+			const visionModelName = imageOcrProvider === "gemini" ? "gemini-3.7-flash" : (imageOcrVisionModel || "llava");
 
 			this.loadingMessage = `Analyzing ${allImages.length} image(s) with ${visionModelName}...`;
 			this.render();

@@ -8,12 +8,12 @@ export const PROVIDERS: { value: AIProvider; label: string }[] = [
 ];
 
 export const MODELS_BY_PROVIDER: Record<AIProvider, string[]> = {
-  gemini: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"],
+  gemini: ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
   ollama: ["llama3.2:latest", "llava:latest", "llama3.2:3b", "qwen2.5:3b", "mistral:7b"],
 };
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<AIProvider, string> = {
-  gemini: "gemini-2.0-flash",
+  gemini: "gemini-3.7-flash",
   ollama: "llama3.2:latest",
 };
 

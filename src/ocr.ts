@@ -59,7 +59,7 @@ export async function extractOcrDataFromNoteImages(
 		debugLines.push(`Vision model: ${settings.visionModel}`);
 		debugLines.push(`Ollama base URL: ${(settings.ollamaBaseUrl || "http://127.0.0.1:11434").replace(/\/$/, "")}`);
 	} else {
-		debugLines.push(`Gemini model: gemini-2.0-flash`);
+		debugLines.push(`Gemini model: gemini-3.7-flash`);
 	}
 
 	for (let index = 0; index < imageFiles.length; index++) {
@@ -592,7 +592,7 @@ async function runGeminiVisionOCR(
 	imageBase64: string,
 	mimeType: string,
 	apiKey: string,
-	model = "gemini-2.0-flash"
+	model = "gemini-3.7-flash"
 ): Promise<string> {
 	const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
