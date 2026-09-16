@@ -1,6 +1,5 @@
 import { App, ItemView, Notice, WorkspaceLeaf, TFile, debounce, setIcon } from "obsidian";
 import { VIEW_TYPE_DEEP_NOTES, IMAGE_SCAN_SYSTEM_PROMPT } from "./constants";
-import type { AIProvider } from "./constants";
 import { generateDeepNotesQuestions, evaluateResponses, DeepNotesItem, EvaluationResult, generateDeepNotesSubQuestions } from "./ai";
 import { getEmbedding } from "./embeddings";
 import type { SearchResult } from "./vectorStore";
@@ -8,7 +7,7 @@ import { listEmbeddedImages, loadImagesByPaths, resolveExcalidrawEmbeddedImages,
 import { saveSession, getSessionsForNote, deleteSession, QASession } from "./history";
 import { HIGHLIGHT_COLORS, applyHighlights, clearAllHighlights, scrollToExcerpt, findExcerptInText } from "./highlights";
 import type DeepNotesPlugin from "./main";
-import type { DeepNotesStudyMode } from "./settings";
+import type { DeepNotesStudyMode, DeepNotesSettings } from "./settings";
 
 function reciprocalRankFusion(
     denseResults: SearchResult[],
@@ -485,9 +484,9 @@ For background context only (do NOT generate questions about this text directly)
 ${noteContent}`;
 
 			// Create synthetic settings for vision generation
-			const visionSettings = {
+			const visionSettings: DeepNotesSettings = {
 				...this.plugin.settings,
-				provider: visionProvider as AIProvider,
+				provider: visionProvider,
 				model: visionModelName,
 			};
 
