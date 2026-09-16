@@ -14,7 +14,7 @@
     "@typescript-eslint/utils": "^8.57.0",
     "esbuild": "0.17.3",
     "eslint": "^10.0.3",
-    "eslint-plugin-obsidianmd": "^0.1.9",
+    "eslint-plugin-obsidianmd": "^0.4.2",
     "obsidian": "latest",
     "typescript": "4.7.4",
     "typescript-eslint": "^8.57.0"

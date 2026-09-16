@@ -1016,7 +1016,7 @@ ${noteContent}`;
 				: item.type === "cross-topic"
 					? "Cross-topic"
 					: "Suggestion";
-		headerRow.createEl("span", {
+		headerRow.createSpan({
 			text: badgeText,
 			cls: `deep-notes-badge deep-notes-badge-${item.type}`,
 		});
@@ -1110,7 +1110,7 @@ ${noteContent}`;
 		card.addClass("deep-notes-card-bordered");
 
 		const headerRow = card.createDiv({ cls: "deep-notes-card-header" });
-		headerRow.createEl("span", { text: "Multiple choice", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
+		headerRow.createSpan({ text: "Multiple choice", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
 
 		card.createEl("p", { text: item.text, cls: "deep-notes-text" });
 
@@ -1152,12 +1152,12 @@ ${noteContent}`;
 		if (this.flippedCards.has(idx)) inner.addClass("flipped");
 
 		const front = inner.createDiv({ cls: "deep-notes-flashcard-face deep-notes-flashcard-front" });
-		front.createEl("span", { text: "Front", cls: "deep-notes-badge deep-notes-badge-suggestion" });
+		front.createSpan({ text: "Front", cls: "deep-notes-badge deep-notes-badge-suggestion" });
 		front.createEl("p", { text: item.text, cls: "deep-notes-text" });
 		front.createEl("p", { text: "Click to reveal answer", cls: "deep-notes-flashcard-hint" });
 
 		const back = inner.createDiv({ cls: "deep-notes-flashcard-face deep-notes-flashcard-back" });
-		back.createEl("span", { text: "Back", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
+		back.createSpan({ text: "Back", cls: "deep-notes-badge deep-notes-badge-knowledge-expansion" });
 		back.createEl("p", { text: item.sampleAnswer || "(no answer)", cls: "deep-notes-text" });
 		back.createEl("p", { text: "Click to flip back", cls: "deep-notes-flashcard-hint" });
 
@@ -1338,18 +1338,18 @@ ${noteContent}`;
 			});
 
 			const meta = card.createDiv({ cls: "deep-notes-history-meta" });
-			meta.createEl("span", { text: dateStr, cls: "deep-notes-history-date" });
+			meta.createSpan({ text: dateStr, cls: "deep-notes-history-date" });
 
 			if (session.evaluation) {
 				const scoreClass =
 					session.evaluation.score >= 80 ? "score-green" :
 						session.evaluation.score >= 50 ? "score-yellow" : "score-red";
-				meta.createEl("span", {
+				meta.createSpan({
 					text: `${session.evaluation.score}%`,
 					cls: `deep-notes-badge deep-notes-history-score ${scoreClass}`,
 				});
 			} else {
-				meta.createEl("span", {
+				meta.createSpan({
 					text: "Not evaluated",
 					cls: "deep-notes-badge",
 				});
@@ -1386,7 +1386,7 @@ ${noteContent}`;
 
 		// Header: title + select all/none inline
 		const headerRow = picker.createDiv({ cls: "deep-notes-picker-header" });
-		headerRow.createEl("span", { text: "Select images", cls: "deep-notes-picker-title" });
+		headerRow.createSpan({ text: "Select images", cls: "deep-notes-picker-title" });
 
 		const controls = headerRow.createDiv({ cls: "deep-notes-picker-controls" });
 		const selectAllBtn = controls.createEl("button", {
@@ -1439,20 +1439,20 @@ ${noteContent}`;
 			const displayName = img.isExcalidraw
 				? img.name.replace(/\.excalidraw$/i, "")
 				: `${img.name}.${img.extension}`;
-			label.createEl("span", {
+			label.createSpan({
 				text: displayName,
 				cls: "deep-notes-picker-name",
 			});
 
 			const badgeText = img.isExcalidraw ? "drawing" : img.extension.toLowerCase();
-			label.createEl("span", {
+			label.createSpan({
 				text: badgeText,
 				cls: "deep-notes-picker-badge",
 			});
 		}
 
 		// Selection count
-		picker.createEl("span", {
+		picker.createSpan({
 			text: `${this.selectedImagePaths.size} of ${this.availableImages.length} selected`,
 			cls: "deep-notes-picker-count",
 		});
@@ -1523,8 +1523,8 @@ ${noteContent}`;
 			const iconEl = node.createDiv({ cls: "deep-notes-flow-icon" });
 			setIcon(iconEl, step.icon);
 			const textEl = node.createDiv({ cls: "deep-notes-flow-text" });
-			textEl.createEl("span", { text: step.label, cls: "deep-notes-flow-label" });
-			textEl.createEl("span", { text: step.desc, cls: "deep-notes-flow-desc" });
+			textEl.createSpan({ text: step.label, cls: "deep-notes-flow-label" });
+			textEl.createSpan({ text: step.desc, cls: "deep-notes-flow-desc" });
 
 			// Connector line between nodes
 			if (i < steps.length - 1) {
@@ -1594,11 +1594,11 @@ ${noteContent}`;
 		const scoreEl = scoreSection.createDiv({
 			cls: `deep-notes-score ${scoreColorClass}`,
 		});
-		scoreEl.createEl("span", {
+		scoreEl.createSpan({
 			text: `${result.score}%`,
 			cls: "deep-notes-score-value",
 		});
-		scoreEl.createEl("span", {
+		scoreEl.createSpan({
 			text: "Understanding",
 			cls: "deep-notes-score-label",
 		});
@@ -1620,7 +1620,7 @@ ${noteContent}`;
 			const ratingClass = `rating-${fb.rating}`; // Used for color coding only
 
 			// Display raw similarity score instead of categories
-			fbHeader.createEl("span", {
+			fbHeader.createSpan({
 				text: fb.explanation, // Contains "Similarity: X%"
 				cls: `deep-notes-badge deep-notes-rating-badge ${ratingClass}`,
 			});

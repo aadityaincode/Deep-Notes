@@ -192,7 +192,7 @@ export class VaultVectorStore {
         console.debug(`[DeepNotes] Chunked ${file.path} into ${chunks.length} chunks`);
 
         // Get existing items for hash-based incremental indexing
-        const existingItems = await this.index.listItemsByMetadata({ filePath: file.path } as Partial<ChunkMetadata>);
+        const existingItems = await this.index.listItemsByMetadata({ filePath: file.path });
         const existingByChunkIndex = new Map<number, { id: string; textHash?: string }>();
         for (const item of existingItems) {
             const meta = item.metadata as unknown as ChunkMetadata;
@@ -242,7 +242,7 @@ export class VaultVectorStore {
                     text: chunk.text,
                     mtime: file.stat.mtime,
                     textHash,
-                } as ChunkMetadata,
+                },
             });
 
             this.quantizedVectors.set(id, quantized);
@@ -260,7 +260,7 @@ export class VaultVectorStore {
     async removeNote(filePath: string): Promise<void> {
         const results = await this.index.listItemsByMetadata({
             filePath,
-        } as Partial<ChunkMetadata>);
+        });
 
         for (const item of results) {
             await this.index.deleteItem(item.id);
@@ -348,7 +348,7 @@ export class VaultVectorStore {
     async isIndexed(filePath: string, mtime: number): Promise<boolean> {
         const results = await this.index.listItemsByMetadata({
             filePath,
-        } as Partial<ChunkMetadata>);
+        });
 
         if (results.length === 0) return false;
         const storedMtime = (results[0].metadata as unknown as ChunkMetadata).mtime;

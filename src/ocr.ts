@@ -164,14 +164,16 @@ function extractEmbeddedImageLinks(noteContent: string): string[] {
 	const links: string[] = [];
 
 	const wikiEmbedRegex = /!\[\[([^\]]+)\]\]/g;
-	for (const match of noteContent.matchAll(wikiEmbedRegex)) {
-		const raw = (match[1] ?? "").split("|")[0]?.trim();
+	let wikiMatch: RegExpExecArray | null;
+	while ((wikiMatch = wikiEmbedRegex.exec(noteContent)) !== null) {
+		const raw = (wikiMatch[1] ?? "").split("|")[0]?.trim();
 		if (raw) links.push(raw);
 	}
 
 	const markdownImageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
-	for (const match of noteContent.matchAll(markdownImageRegex)) {
-		const raw = (match[1] ?? "").trim();
+	let mdMatch: RegExpExecArray | null;
+	while ((mdMatch = markdownImageRegex.exec(noteContent)) !== null) {
+		const raw = (mdMatch[1] ?? "").trim();
 		if (raw) links.push(raw);
 	}
 
@@ -271,7 +273,8 @@ function extractExcalidrawEmbeddedImageLinks(content: string): string[] {
 	if (!sectionMatch) return [];
 	const links: string[] = [];
 	const wikiRegex = /\[\[([^\]]+)\]\]/g;
-	for (const m of sectionMatch[1].matchAll(wikiRegex)) {
+	let m: RegExpExecArray | null;
+	while ((m = wikiRegex.exec(sectionMatch[1])) !== null) {
 		const raw = (m[1] ?? "").split("|")[0]?.trim();
 		if (raw) links.push(raw);
 	}

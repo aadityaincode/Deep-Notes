@@ -503,16 +503,21 @@ function normalizeDeepNotesItem(entry: unknown): DeepNotesItem | null {
 }
 
 function extractTextFieldsFromJsonLikeText(content: string): DeepNotesItem[] {
-	const matches = Array.from(content.matchAll(/"text"\s*:\s*"([\s\S]*?)"/g));
-	if (matches.length === 0) {
+	const regex = /"text"\s*:\s*"([\s\S]*?)"/g;
+	const rawTexts: string[] = [];
+	let match: RegExpExecArray | null;
+	while ((match = regex.exec(content)) !== null) {
+		rawTexts.push(match[1]);
+	}
+	if (rawTexts.length === 0) {
 		return [];
 	}
 
-	const items = matches
-		.map((m) => decodeJsonString(m[1]))
+	const items = rawTexts
+		.map((raw) => decodeJsonString(raw))
 		.map((text) => toHumanReadableText(text))
 		.filter((text) => text.length > 0)
-		.map((text) => ({ type: "knowledge-expansion", text } as DeepNotesItem));
+		.map((text): DeepNotesItem => ({ type: "knowledge-expansion", text }));
 
 	return items;
 }
