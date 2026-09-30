@@ -1,6 +1,6 @@
 # Deep Notes
 
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
+[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](https://github.com/aadityaincode/Deep-Notes)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 **Turn your Obsidian notes into an active study session powered by AI.**
